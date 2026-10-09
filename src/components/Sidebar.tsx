@@ -85,7 +85,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Sidebar Container matching Image 2 */}
       <aside
-        className={`no-print fixed md:sticky top-0 h-screen z-50 md:z-30 flex flex-col bg-[#0b1329] text-slate-200 border-r border-slate-800 transition-all duration-300 ease-in-out ${
+        className={`no-print fixed md:static top-0 h-full z-50 md:z-30 flex flex-col shrink-0 bg-[#0b1329] text-slate-200 border-r border-slate-800 transition-all duration-300 ease-in-out ${
           isOpenMobile ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         } ${collapsed ? 'w-18' : 'w-64'}`}
       >

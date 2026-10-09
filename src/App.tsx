@@ -208,7 +208,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100/70 text-slate-800 flex flex-col font-sans antialiased selection:bg-blue-600 selection:text-white">
+    <div className="h-screen bg-slate-100/70 text-slate-800 flex flex-col font-sans antialiased overflow-hidden selection:bg-blue-600 selection:text-white">
       {/* Top Header */}
       <Header
         currentRole={currentRole}
@@ -226,8 +226,8 @@ export default function App() {
         onExportPdf={handleExportSummaryPdf}
       />
 
-      <div className="flex-1 flex w-full">
-        {/* Collapsible Sidebar */}
+      <div className="flex-1 flex w-full min-h-0 overflow-hidden">
+        {/* Collapsible Sidebar (Locked in place) */}
         <Sidebar
           activeTab={activeTab}
           onTabChange={(tab) => {
@@ -246,8 +246,8 @@ export default function App() {
           onCloseMobile={() => setMobileMenuOpen(false)}
         />
 
-        {/* Main Content Area */}
-        <main className="flex-1 min-w-0 p-3 sm:p-5 lg:p-6 pb-20 md:pb-8">
+        {/* Main Content Area (Independent scroll) */}
+        <main className="flex-1 min-w-0 overflow-y-auto p-3 sm:p-5 lg:p-6 pb-24 md:pb-10">
           {/* Global Filter Bar */}
           <FilterBar
             filterOptions={dashboardData.filterOptions}
@@ -333,6 +333,11 @@ export default function App() {
           )}
 
           {activeTab === 'data_log' && <DataLogView records={records} />}
+
+          {/* Footer inside scrollable content */}
+          <footer className="no-print border-t border-slate-200/80 bg-white/70 py-4 text-center text-xs text-slate-500 mt-10 rounded-2xl">
+            Monitoring Board — Rekap Data Proses Krosok All Rights Reserved · Divisi Produksi I · Developed by Lalu Mahendra
+          </footer>
         </main>
       </div>
 
@@ -348,11 +353,6 @@ export default function App() {
         }}
         currentRole={currentRole}
       />
-
-      {/* Footer */}
-      <footer className="no-print border-t border-slate-200/80 bg-white/70 py-4 text-center text-xs text-slate-500">
-        Monitoring Board — Rekap Data Proses Krosok All Rights Reserved · Divisi Produksi I · Developed by Lalu Mahendra
-      </footer>
 
       {/* Modals */}
       <GasCenterModal
