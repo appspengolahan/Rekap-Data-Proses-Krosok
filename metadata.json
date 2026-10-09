@@ -1,0 +1,6 @@
+{
+  "name": "Monitoring Rekap Proses Krosok",
+  "description": "Aplikasi monitoring rekap proses krosok dengan arsitektur headless Google Apps Script, offline-first localStorage cache, dan navigasi multi-role.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

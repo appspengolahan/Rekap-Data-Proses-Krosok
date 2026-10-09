@@ -1,0 +1,27 @@
+@import "tailwindcss";
+
+@layer utilities {
+  @media print {
+    body.print-summary-only .no-print,
+    body.print-tab-only .no-print {
+      display: none !important;
+    }
+
+    body {
+      background: white !important;
+      color: black !important;
+      padding: 0 !important;
+      margin: 0 !important;
+    }
+
+    header, aside, nav, footer {
+      display: none !important;
+    }
+
+    main {
+      padding: 0 !important;
+      margin: 0 !important;
+      max-width: 100% !important;
+    }
+  }
+}
