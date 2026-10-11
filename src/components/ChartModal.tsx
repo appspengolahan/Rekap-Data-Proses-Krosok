@@ -78,8 +78,8 @@ export const ChartModal: React.FC<ChartModalProps> = ({
         </div>
 
         {/* Modal Body: Pure Maximized Chart */}
-        <div className="p-6 sm:p-8 overflow-y-auto flex-1">
-          <div className="w-full bg-slate-50/40 rounded-2xl p-4 sm:p-6 border border-slate-100">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 flex flex-col justify-center">
+          <div className="w-full bg-slate-50/40 rounded-2xl p-3 sm:p-4 border border-slate-100">
             {children}
           </div>
         </div>

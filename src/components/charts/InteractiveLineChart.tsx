@@ -40,16 +40,25 @@ export const InteractiveLineChart: React.FC<InteractiveLineChartProps> = ({
 
   const isMaximized = height > 350;
   const padding = {
-    top: isMaximized ? 35 : 25,
+    top: isMaximized ? 40 : 28,
     right: isMaximized ? 35 : 25,
-    bottom: isMaximized ? 45 : 35,
-    left: isMaximized ? 55 : 45
+    bottom: isMaximized ? 52 : 38,
+    left: isMaximized ? 62 : 48
   };
   const width = isMaximized ? 850 : 600; // viewBox width
 
   const values = data.map((d) => d.value);
-  const minVal = Math.max(0, Math.min(...values) * 0.85);
-  const maxVal = Math.max(1, Math.max(...values) * 1.2); // 20% headroom for labels
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const range = rawMax - rawMin;
+
+  // Adaptive scale to prevent huge empty whitespace when values are small percentages (e.g. 0.05% - 0.15%)
+  // Provide proportional headroom (~25%) for data badges rather than forcing a 1.00% ceiling.
+  const headroom = Math.max(range * 0.25, rawMax * 0.25, 0.02);
+  const maxVal = Math.max(0.04, Math.ceil((rawMax + headroom) * 100) / 100);
+  const minVal = rawMin < 0 ? Math.floor(rawMin * 100) / 100 : 0;
+
+  const yAxisDecimals = (maxVal - minVal) < 0.3 ? 2 : (maxVal - minVal) < 2 ? 1 : 1;
 
   const chartW = width - padding.left - padding.right;
   const chartH = height - padding.top - padding.bottom;
@@ -136,7 +145,7 @@ export const InteractiveLineChart: React.FC<InteractiveLineChartProps> = ({
                 textAnchor="end"
                 className="text-[10px] fill-slate-400 font-medium"
               >
-                {g.val.toFixed(2)}
+                {g.val.toFixed(yAxisDecimals)}
                 {unit}
               </text>
             </g>
