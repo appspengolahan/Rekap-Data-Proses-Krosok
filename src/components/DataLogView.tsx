@@ -19,7 +19,7 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records }) => {
   }, [records]);
 
   const filteredRecords = useMemo(() => {
-    return records.filter((r) => {
+    const list = records.filter((r) => {
       const matchSearch =
         r.jenisKrosok.toLowerCase().includes(searchTerm.toLowerCase()) ||
         r.tanggal.includes(searchTerm) ||
@@ -28,6 +28,14 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records }) => {
       const matchProses = filterProses === 'Semua' || r.jenisProses === filterProses;
       const matchTahun = filterTahun === 'Semua' || r.tahun === filterTahun;
       return matchSearch && matchProses && matchTahun;
+    });
+
+    // Urutkan periode terbaru berada paling atas, periode terlama di posisi paling bawah
+    return list.sort((a, b) => {
+      if (a.tanggal !== b.tanggal) {
+        return b.tanggal.localeCompare(a.tanggal);
+      }
+      return b.srcRow - a.srcRow;
     });
   }, [records, searchTerm, filterProses, filterTahun]);
 
