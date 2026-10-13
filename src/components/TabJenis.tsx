@@ -108,7 +108,7 @@ export const TabJenis: React.FC<TabJenisProps> = ({
 
                 <button
                   onClick={() => setMaximizedChart('trend')}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-colors"
+                  className="no-print inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-colors"
                 >
                   <Maximize2 className="w-3 h-3" />
                   <span>Perbesar</span>
@@ -126,7 +126,7 @@ export const TabJenis: React.FC<TabJenisProps> = ({
           </div>
 
           {/* Footer Callout matching reference Image 3 */}
-          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400 group-hover:text-emerald-700 transition-colors">
+          <div className="no-print mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400 group-hover:text-emerald-700 transition-colors">
             <span className="flex items-center gap-1 text-[11px] font-medium">
               <Maximize2 className="w-3 h-3" />
               <span>Klik kartu ini untuk perbesar ke tengah layar</span>
@@ -159,7 +159,7 @@ export const TabJenis: React.FC<TabJenisProps> = ({
                   e.stopPropagation();
                   setMaximizedChart('comparison');
                 }}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-colors"
+                className="no-print inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-colors"
               >
                 <Maximize2 className="w-3 h-3" />
                 <span>Perbesar</span>
@@ -212,7 +212,7 @@ export const TabJenis: React.FC<TabJenisProps> = ({
           </div>
 
           {/* Footer Callout matching reference Image 3 */}
-          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400 group-hover:text-indigo-600 transition-colors">
+          <div className="no-print mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400 group-hover:text-indigo-600 transition-colors">
             <span className="flex items-center gap-1 text-[11px] font-medium">
               <Maximize2 className="w-3 h-3" />
               <span>Klik kartu ini untuk perbesar ke tengah layar</span>
@@ -237,7 +237,7 @@ export const TabJenis: React.FC<TabJenisProps> = ({
           </div>
 
           {/* Table Search Input */}
-          <div className="relative">
+          <div className="no-print relative">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"

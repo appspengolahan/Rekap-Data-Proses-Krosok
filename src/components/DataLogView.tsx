@@ -97,7 +97,7 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records }) => {
   return (
     <div className="space-y-4 animate-in fade-in duration-200">
       {/* Control Bar */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 flex items-center justify-between gap-3 flex-wrap">
+      <div className="no-print bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2.5 flex-wrap">
           {/* Search Box */}
           <div className="relative">
@@ -243,7 +243,7 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records }) => {
         </div>
 
         {/* Pagination Controls */}
-        <div className="p-3 sm:p-4 border-t border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+        <div className="no-print p-3 sm:p-4 border-t border-slate-100 flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2 text-xs text-slate-500">
             <span>Baris per halaman:</span>
             <select

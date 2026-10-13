@@ -158,7 +158,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
               <select
                 value={selectedTahun}
                 onChange={(e) => onTahunChange(e.target.value)}
-                className="text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl px-2.5 py-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="no-print text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl px-2.5 py-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
               >
                 <option value="Semua">Semua Tahun</option>
                 {filterOptions.tahun.map((t) => (
@@ -190,7 +190,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
               <select
                 value={bulanRingkasan}
                 onChange={(e) => onBulanRingkasanChange(e.target.value)}
-                className="text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl px-2.5 py-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="no-print text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl px-2.5 py-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
               >
                 <option value="Semua">Semua Bulan</option>
                 {filterOptions.bulan.map((b) => (
@@ -203,7 +203,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
               <select
                 value={selectedTahun}
                 onChange={(e) => onTahunChange(e.target.value)}
-                className="text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl px-2.5 py-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="no-print text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl px-2.5 py-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
               >
                 <option value="Semua">Semua Tahun</option>
                 {filterOptions.tahun.map((t) => (

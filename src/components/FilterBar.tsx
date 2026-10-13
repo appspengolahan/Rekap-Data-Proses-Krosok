@@ -83,7 +83,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
         </div>
 
         {/* Right Action Buttons matching Image 2 */}
-        <div className="flex items-center gap-2.5 flex-wrap ml-auto">
+        <div className="no-print flex items-center gap-2.5 flex-wrap ml-auto">
           {/* Tarik Datasheet */}
           <button
             onClick={onRefresh}

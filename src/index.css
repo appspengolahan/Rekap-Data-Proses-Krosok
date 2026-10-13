@@ -2,26 +2,58 @@
 
 @layer utilities {
   @media print {
-    body.print-summary-only .no-print,
-    body.print-tab-only .no-print {
+    /* Hide all navigation buttons, action buttons, modals, sidebars, headers, and any element marked with no-print */
+    .no-print,
+    button,
+    header,
+    aside,
+    nav,
+    footer,
+    [role="dialog"],
+    [role="navigation"],
+    .modal-backdrop {
       display: none !important;
     }
 
-    body {
+    /* Print Summary Mode: hide detailed tab charts/tables */
+    body.print-summary-only .tab-detail-section {
+      display: none !important;
+    }
+
+    /* Print Tab Mode: hide top summary cards */
+    body.print-tab-only .summary-cards-section {
+      display: none !important;
+    }
+
+    /* Allow document body and main content to expand cleanly without being clipped to 1 screen */
+    html,
+    body,
+    #root,
+    .h-screen {
+      height: auto !important;
+      min-height: 100% !important;
+      overflow: visible !important;
       background: white !important;
       color: black !important;
       padding: 0 !important;
       margin: 0 !important;
     }
 
-    header, aside, nav, footer {
-      display: none !important;
-    }
-
     main {
       padding: 0 !important;
       margin: 0 !important;
       max-width: 100% !important;
+      overflow: visible !important;
+      height: auto !important;
+    }
+
+    /* Prevent page break cuts inside cards and tables */
+    table,
+    tr,
+    .rounded-3xl,
+    .rounded-2xl {
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
   }
 }

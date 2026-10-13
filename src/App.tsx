@@ -267,24 +267,37 @@ export default function App() {
           {activeTab === 'overview' && (
             <div className="space-y-6">
               {/* Summary Metric Cards */}
-              <SummaryCards
-                ringkasanTahunan={dashboardData.ringkasanTahunan}
-                ringkasanBulanan={dashboardData.ringkasanBulanan}
-                ringkasanPeriode={dashboardData.ringkasanPeriode}
-                filterOptions={dashboardData.filterOptions}
-                bulanRingkasan={bulanRingkasan}
-                onBulanRingkasanChange={setBulanRingkasan}
-                selectedTahun={selectedTahun}
-                onTahunChange={setSelectedTahun}
-                periodeAwal={periodeAwal}
-                periodeAkhir={periodeAkhir}
-                onPeriodeAwalChange={setPeriodeAwal}
-                onPeriodeAkhirChange={setPeriodeAkhir}
-                onApplyPeriode={() => {}}
-                onNavigateToJenisTab={() => setActiveTab('jenis')}
-              />
+              <div className="summary-cards-section">
+                <SummaryCards
+                  ringkasanTahunan={dashboardData.ringkasanTahunan}
+                  ringkasanBulanan={dashboardData.ringkasanBulanan}
+                  ringkasanPeriode={dashboardData.ringkasanPeriode}
+                  filterOptions={dashboardData.filterOptions}
+                  bulanRingkasan={bulanRingkasan}
+                  onBulanRingkasanChange={setBulanRingkasan}
+                  selectedTahun={selectedTahun}
+                  onTahunChange={setSelectedTahun}
+                  periodeAwal={periodeAwal}
+                  periodeAkhir={periodeAkhir}
+                  onPeriodeAwalChange={setPeriodeAwal}
+                  onPeriodeAkhirChange={setPeriodeAkhir}
+                  onApplyPeriode={() => {}}
+                  onNavigateToJenisTab={() => setActiveTab('jenis')}
+                />
+              </div>
 
               {/* In Overview Mode, show Bulan Tab as primary detailed section */}
+              <div className="tab-detail-section">
+                <TabBulan
+                  rekapBulan={dashboardData.rekapBulan}
+                  onExportTabPdf={handleExportTabPdf}
+                />
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'bulan' && (
+            <div className="tab-detail-section">
               <TabBulan
                 rekapBulan={dashboardData.rekapBulan}
                 onExportTabPdf={handleExportTabPdf}
@@ -292,43 +305,40 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'bulan' && (
-            <TabBulan
-              rekapBulan={dashboardData.rekapBulan}
-              onExportTabPdf={handleExportTabPdf}
-            />
-          )}
-
           {activeTab === 'jenis' && (
             <div className="space-y-6">
               {/* Top Summary Cards to allow period range tweaking */}
-              <SummaryCards
-                ringkasanTahunan={dashboardData.ringkasanTahunan}
-                ringkasanBulanan={dashboardData.ringkasanBulanan}
-                ringkasanPeriode={dashboardData.ringkasanPeriode}
-                filterOptions={dashboardData.filterOptions}
-                bulanRingkasan={bulanRingkasan}
-                onBulanRingkasanChange={setBulanRingkasan}
-                selectedTahun={selectedTahun}
-                onTahunChange={setSelectedTahun}
-                periodeAwal={periodeAwal}
-                periodeAkhir={periodeAkhir}
-                onPeriodeAwalChange={setPeriodeAwal}
-                onPeriodeAkhirChange={setPeriodeAkhir}
-                onApplyPeriode={() => {}}
-                onNavigateToJenisTab={() => {}}
-              />
+              <div className="summary-cards-section">
+                <SummaryCards
+                  ringkasanTahunan={dashboardData.ringkasanTahunan}
+                  ringkasanBulanan={dashboardData.ringkasanBulanan}
+                  ringkasanPeriode={dashboardData.ringkasanPeriode}
+                  filterOptions={dashboardData.filterOptions}
+                  bulanRingkasan={bulanRingkasan}
+                  onBulanRingkasanChange={setBulanRingkasan}
+                  selectedTahun={selectedTahun}
+                  onTahunChange={setSelectedTahun}
+                  periodeAwal={periodeAwal}
+                  periodeAkhir={periodeAkhir}
+                  onPeriodeAwalChange={setPeriodeAwal}
+                  onPeriodeAkhirChange={setPeriodeAkhir}
+                  onApplyPeriode={() => {}}
+                  onNavigateToJenisTab={() => {}}
+                />
+              </div>
 
-              <TabJenis
-                rekapJenisPeriode={dashboardData.rekapJenisKrosokPeriode}
-                trendJenis={dashboardData.trendJenis}
-                filterOptions={dashboardData.filterOptions}
-                selectedJenisKrosok={selectedTrendJenis}
-                onJenisKrosokChange={setSelectedTrendJenis}
-                periodeLabel={dashboardData.ringkasanPeriode.periodeLabel}
-                onExportTabPdf={handleExportTabPdf}
-                onScrollToPeriodePicker={scrollToPeriodePicker}
-              />
+              <div className="tab-detail-section">
+                <TabJenis
+                  rekapJenisPeriode={dashboardData.rekapJenisKrosokPeriode}
+                  trendJenis={dashboardData.trendJenis}
+                  filterOptions={dashboardData.filterOptions}
+                  selectedJenisKrosok={selectedTrendJenis}
+                  onJenisKrosokChange={setSelectedTrendJenis}
+                  periodeLabel={dashboardData.ringkasanPeriode.periodeLabel}
+                  onExportTabPdf={handleExportTabPdf}
+                  onScrollToPeriodePicker={scrollToPeriodePicker}
+                />
+              </div>
             </div>
           )}
 

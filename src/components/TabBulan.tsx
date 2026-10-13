@@ -90,7 +90,7 @@ export const TabBulan: React.FC<TabBulanProps> = ({ rekapBulan, onExportTabPdf }
                   e.stopPropagation();
                   setMaximizedChart('line');
                 }}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors"
+                className="no-print inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors"
               >
                 <Maximize2 className="w-3 h-3" />
                 <span>Perbesar</span>
@@ -107,7 +107,7 @@ export const TabBulan: React.FC<TabBulanProps> = ({ rekapBulan, onExportTabPdf }
           </div>
 
           {/* Footer Callout matching reference Image 3 */}
-          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400 group-hover:text-blue-600 transition-colors">
+          <div className="no-print mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400 group-hover:text-blue-600 transition-colors">
             <span className="flex items-center gap-1 text-[11px] font-medium">
               <Maximize2 className="w-3 h-3" />
               <span>Klik kartu ini untuk perbesar ke tengah layar</span>
@@ -149,7 +149,7 @@ export const TabBulan: React.FC<TabBulanProps> = ({ rekapBulan, onExportTabPdf }
                     e.stopPropagation();
                     setMaximizedChart('bar');
                   }}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors"
+                  className="no-print inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors"
                 >
                   <Maximize2 className="w-3 h-3" />
                   <span>Perbesar</span>
@@ -167,7 +167,7 @@ export const TabBulan: React.FC<TabBulanProps> = ({ rekapBulan, onExportTabPdf }
           </div>
 
           {/* Footer Callout matching reference Image 3 */}
-          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400 group-hover:text-blue-600 transition-colors">
+          <div className="no-print mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400 group-hover:text-blue-600 transition-colors">
             <span className="flex items-center gap-1 text-[11px] font-medium">
               <Maximize2 className="w-3 h-3" />
               <span>Klik kartu ini untuk perbesar ke tengah layar</span>
