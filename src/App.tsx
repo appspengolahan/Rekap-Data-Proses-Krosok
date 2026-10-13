@@ -216,14 +216,12 @@ export default function App() {
         syncStatus={syncStatus}
         autoSyncEnabled={config.autoSyncEnabled}
         onToggleAutoSync={handleToggleAutoSync}
-        onManualRefresh={() => performSync(true)}
         onOpenGasCenter={() => setIsGasCenterOpen(true)}
         onOpenHelp={() => setIsHelpOpen(true)}
         onToggleMobileMenu={() => setMobileMenuOpen(true)}
         selectedJenisProses={selectedJenisProses}
         onJenisProsesChange={setSelectedJenisProses}
         entriTerkini={dashboardData.entriTerkini}
-        onExportPdf={handleExportSummaryPdf}
       />
 
       <div className="flex-1 flex w-full min-h-0 overflow-hidden">

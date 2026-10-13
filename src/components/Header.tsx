@@ -1,16 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  RotateCw,
-  RefreshCw,
   HelpCircle,
   ExternalLink,
   ChevronDown,
   Layers,
   Database,
   Shield,
-  Menu,
-  FileSpreadsheet,
-  FileText
+  Menu
 } from 'lucide-react';
 import { UserRole, SyncStatus } from '../types';
 
@@ -20,14 +16,14 @@ interface HeaderProps {
   syncStatus: SyncStatus;
   autoSyncEnabled: boolean;
   onToggleAutoSync: () => void;
-  onManualRefresh: () => void;
+  onManualRefresh?: () => void;
   onOpenGasCenter: () => void;
   onOpenHelp: () => void;
   onToggleMobileMenu: () => void;
   selectedJenisProses: string;
   onJenisProsesChange: (proses: string) => void;
   entriTerkini: string | null;
-  onExportPdf: () => void;
+  onExportPdf?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -36,14 +32,12 @@ export const Header: React.FC<HeaderProps> = ({
   syncStatus,
   autoSyncEnabled,
   onToggleAutoSync,
-  onManualRefresh,
   onOpenGasCenter,
   onOpenHelp,
   onToggleMobileMenu,
   selectedJenisProses,
   onJenisProsesChange,
-  entriTerkini,
-  onExportPdf
+  entriTerkini
 }) => {
   const [switchOpen, setSwitchOpen] = useState(false);
   const [roleOpen, setRoleOpen] = useState(false);
@@ -130,36 +124,7 @@ export const Header: React.FC<HeaderProps> = ({
             </select>
           </div>
 
-          {/* Tarik Datasheet (green button) */}
-          <button
-            onClick={onManualRefresh}
-            disabled={syncStatus === 'syncing'}
-            title="Tarik data terbaru dari Spreadsheet"
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-semibold shadow-sm transition-all disabled:opacity-50"
-          >
-            <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Tarik Datasheet</span>
-          </button>
 
-          {/* Refresh Icon Button with spin */}
-          <button
-            onClick={onManualRefresh}
-            disabled={syncStatus === 'syncing'}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors"
-            title="Muat Ulang"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${syncStatus === 'syncing' ? 'animate-spin text-blue-400' : ''}`} />
-          </button>
-
-          {/* Export PDF Button */}
-          <button
-            onClick={onExportPdf}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs font-semibold shadow-sm transition-all"
-            title="Export ke PDF"
-          >
-            <FileText className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Export PDF</span>
-          </button>
 
           {/* Role Badge Dropdown */}
           <div className="relative" ref={roleRef}>
