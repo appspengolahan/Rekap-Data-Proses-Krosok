@@ -160,12 +160,16 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
                 onChange={(e) => onTahunChange(e.target.value)}
                 className="no-print text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl px-2.5 py-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
               >
+                <option value="2026">2026</option>
+                <option value="2025">2025</option>
                 <option value="Semua">Semua Tahun</option>
-                {filterOptions.tahun.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
+                {filterOptions.tahun
+                  .filter((t) => t !== '2026' && t !== '2025')
+                  .map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
               </select>
             </div>
           </div>
@@ -205,12 +209,16 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
                 onChange={(e) => onTahunChange(e.target.value)}
                 className="no-print text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl px-2.5 py-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
               >
+                <option value="2026">2026</option>
+                <option value="2025">2025</option>
                 <option value="Semua">Semua Tahun</option>
-                {filterOptions.tahun.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
+                {filterOptions.tahun
+                  .filter((t) => t !== '2026' && t !== '2025')
+                  .map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
               </select>
             </div>
           </div>

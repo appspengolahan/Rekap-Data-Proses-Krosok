@@ -450,11 +450,29 @@ function finalizeGroups(map: ReturnType<typeof aggregateGroups>, totalBaku: numb
 export function computeRekapBulan(
   rows: KrosokRecord[],
   tahun: string,
-  jenisProses: string
+  jenisProses: string,
+  bulanAwal?: string,
+  bulanAkhir?: string
 ): RekapGroup[] {
+  const idxAwal = bulanAwal ? MONTH_ORDER.indexOf(bulanAwal) : -1;
+  const idxAkhir = bulanAkhir ? MONTH_ORDER.indexOf(bulanAkhir) : -1;
+
   const filtered = rows.filter((r) => {
     if (tahun && tahun !== 'Semua' && r.tahun !== tahun) return false;
     if (jenisProses && jenisProses !== 'Semua' && r.jenisProses !== jenisProses) return false;
+
+    if (idxAwal !== -1 && idxAkhir !== -1) {
+      const idx = MONTH_ORDER.indexOf(r.bulan);
+      if (idx !== -1) {
+        if (idxAwal <= idxAkhir) {
+          if (idx < idxAwal || idx > idxAkhir) return false;
+        } else {
+          // Cross-year range (e.g., November to Maret)
+          if (idx < idxAwal && idx > idxAkhir) return false;
+        }
+      }
+    }
+
     return true;
   });
 

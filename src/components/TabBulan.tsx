@@ -1,76 +1,239 @@
-import React, { useState } from 'react';
-import { FileText, Calendar, Maximize2 } from 'lucide-react';
-import { RekapGroup } from '../types';
-import { formatNum, formatPct, getPctClass, MONTH_ORDER } from '../services/dataService';
+import React, { useState, useMemo } from 'react';
+import { FileText, Calendar, Maximize2, RotateCcw, Filter, CheckCircle2 } from 'lucide-react';
+import { KrosokRecord, RekapGroup } from '../types';
+import {
+  formatNum,
+  formatPct,
+  getPctClass,
+  MONTH_ORDER,
+  computeRekapBulan
+} from '../services/dataService';
 import { InteractiveLineChart } from './charts/InteractiveLineChart';
 import { DualBarChart } from './charts/DualBarChart';
 import { ChartModal } from './ChartModal';
 
 interface TabBulanProps {
-  rekapBulan: RekapGroup[];
+  records: KrosokRecord[];
+  selectedTahun: string;
+  onTahunChange: (tahun: string) => void;
+  selectedJenisProses: string;
+  availableYears?: string[];
+  rekapBulan?: RekapGroup[];
   onExportTabPdf: () => void;
 }
 
-export const TabBulan: React.FC<TabBulanProps> = ({ rekapBulan, onExportTabPdf }) => {
+export const TabBulan: React.FC<TabBulanProps> = ({
+  records,
+  selectedTahun,
+  onTahunChange,
+  selectedJenisProses,
+  availableYears,
+  onExportTabPdf
+}) => {
   // Modal state for maximized chart: 'line' | 'bar' | null
   const [maximizedChart, setMaximizedChart] = useState<'line' | 'bar' | null>(null);
 
+  // Filter Panel States for Tab Rekap per Bulan (Default: Januari – Oktober 2026)
+  const [bulanAwal, setBulanAwal] = useState<string>('Januari');
+  const [bulanAkhir, setBulanAkhir] = useState<string>('Oktober');
+
+  // Instant Reset to Default: Januari – Oktober 2026
+  const handleResetDefault = () => {
+    setBulanAwal('Januari');
+    setBulanAkhir('Oktober');
+    onTahunChange('2026');
+  };
+
+  // Synchronized computation of monthly recap based on selected period
+  const activeRekapBulan = useMemo(() => {
+    return computeRekapBulan(
+      records,
+      selectedTahun,
+      selectedJenisProses,
+      bulanAwal,
+      bulanAkhir
+    );
+  }, [records, selectedTahun, selectedJenisProses, bulanAwal, bulanAkhir]);
+
   // Table rows sorted with newest month at top (terbaru paling atas, terlama paling bawah)
-  const sortedTableBulan = [...rekapBulan].sort((a, b) => {
-    const yearA = parseInt(a.tahun || '0', 10);
-    const yearB = parseInt(b.tahun || '0', 10);
-    if (yearA !== yearB) return yearB - yearA;
-    return MONTH_ORDER.indexOf(b.bulan || '') - MONTH_ORDER.indexOf(a.bulan || '');
-  });
+  const sortedTableBulan = useMemo(() => {
+    return [...activeRekapBulan].sort((a, b) => {
+      const yearA = parseInt(a.tahun || '0', 10);
+      const yearB = parseInt(b.tahun || '0', 10);
+      if (yearA !== yearB) return yearB - yearA;
+      return MONTH_ORDER.indexOf(b.bulan || '') - MONTH_ORDER.indexOf(a.bulan || '');
+    });
+  }, [activeRekapBulan]);
 
-  // Line chart data
-  const lineChartData = rekapBulan.map((r) => ({
-    label: r.label.replace(' ', '\n'),
-    value: r.susutPct,
-  }));
+  // Line chart data (chronological timeline)
+  const lineChartData = useMemo(() => {
+    return activeRekapBulan.map((r) => ({
+      label: r.label.replace(' ', '\n'),
+      value: r.susutPct,
+    }));
+  }, [activeRekapBulan]);
 
-  // Dual bar chart data
-  const dualBarData = rekapBulan.map((r) => ({
-    label: r.label.substring(0, 3) + ' ' + (r.tahun?.substring(2) || ''),
-    series1: r.baku,
-    series2: r.hasil,
-  }));
+  // Dual bar chart data (chronological timeline)
+  const dualBarData = useMemo(() => {
+    return activeRekapBulan.map((r) => ({
+      label: r.label.substring(0, 3) + ' ' + (r.tahun?.substring(2) || ''),
+      series1: r.baku,
+      series2: r.hasil,
+    }));
+  }, [activeRekapBulan]);
 
-  // Totals for table
-  const totalDataCount = rekapBulan.reduce((s, r) => s + r.jumlahData, 0);
-  const totalBaku = rekapBulan.reduce((s, r) => s + r.baku, 0);
-  const totalHasil = rekapBulan.reduce((s, r) => s + r.hasil, 0);
+  // Totals for table and KPI overview
+  const totalDataCount = activeRekapBulan.reduce((s, r) => s + r.jumlahData, 0);
+  const totalBaku = activeRekapBulan.reduce((s, r) => s + r.baku, 0);
+  const totalHasil = activeRekapBulan.reduce((s, r) => s + r.hasil, 0);
   const totalSusutKg = totalBaku - totalHasil;
   const totalSusutPct = totalBaku ? (totalSusutKg / totalBaku) * 100 : 0;
-  const avgGagangPct = rekapBulan.length
-    ? rekapBulan.reduce((s, r) => s + r.gagangPct, 0) / rekapBulan.length
+  const avgGagangPct = activeRekapBulan.length
+    ? activeRekapBulan.reduce((s, r) => s + r.gagangPct, 0) / activeRekapBulan.length
     : 0;
-  const avgDebuAirPct = rekapBulan.length
-    ? rekapBulan.reduce((s, r) => s + r.debuAirPct, 0) / rekapBulan.length
+  const avgDebuAirPct = activeRekapBulan.length
+    ? activeRekapBulan.reduce((s, r) => s + r.debuAirPct, 0) / activeRekapBulan.length
     : 0;
+
+  // Years list for dropdown options
+  const yearOptions = useMemo(() => {
+    const list = availableYears ? [...availableYears] : ['2026', '2025'];
+    if (!list.includes('2026')) list.unshift('2026');
+    if (!list.includes('2025')) list.push('2025');
+    // Ensure 2026 is at top, then 2025
+    return Array.from(new Set(list)).sort((a, b) => b.localeCompare(a));
+  }, [availableYears]);
 
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
-      {/* Sub-filter & Export Action */}
-      <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200/80 shadow-xs flex-wrap">
-        <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-          <Calendar className="w-4 h-4 text-blue-600" />
-          <span>Analisis Rekapitulasi Tren Bulanan ({rekapBulan.length} Bulan Terdata)</span>
+      {/* 1. Panel Kontrol Filter Periode */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xs p-4 sm:p-5">
+        <div className="flex items-center justify-between gap-3 mb-3.5 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="p-1.5 rounded-xl bg-blue-50 text-blue-600">
+              <Calendar className="w-4 h-4" />
+            </span>
+            <div>
+              <h3 className="font-bold text-sm sm:text-base text-slate-900">
+                Panel Kontrol Filter Periode — Rekap per Bulan
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Sesuaikan rentang bulan awal, bulan akhir, dan tahun untuk sinkronisasi otomatis seluruh grafik & tabel
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onExportTabPdf}
+              className="no-print inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors border border-slate-200 shadow-2xs"
+            >
+              <FileText className="w-3.5 h-3.5 text-blue-600" />
+              <span>Export Tab Ini (PDF)</span>
+            </button>
+          </div>
         </div>
-        <button
-          onClick={onExportTabPdf}
-          className="no-print inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors border border-slate-200"
-        >
-          <FileText className="w-3.5 h-3.5 text-blue-600" />
-          <span>Export Tab Ini (PDF)</span>
-        </button>
+
+        {/* Filter Controls Row */}
+        <div className="bg-slate-50/80 rounded-2xl border border-slate-200/80 p-3 sm:p-4 flex items-center justify-between gap-3.5 flex-wrap">
+          <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap">
+            {/* Bulan Awal */}
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="filterBulanAwal" className="text-xs font-semibold text-slate-600">
+                Bulan Awal:
+              </label>
+              <select
+                id="filterBulanAwal"
+                value={bulanAwal}
+                onChange={(e) => setBulanAwal(e.target.value)}
+                className="text-xs font-bold bg-white hover:bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 cursor-pointer shadow-2xs"
+              >
+                {MONTH_ORDER.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <span className="text-xs font-bold text-slate-400">s/d</span>
+
+            {/* Bulan Akhir */}
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="filterBulanAkhir" className="text-xs font-semibold text-slate-600">
+                Bulan Akhir:
+              </label>
+              <select
+                id="filterBulanAkhir"
+                value={bulanAkhir}
+                onChange={(e) => setBulanAkhir(e.target.value)}
+                className="text-xs font-bold bg-white hover:bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 cursor-pointer shadow-2xs"
+              >
+                {MONTH_ORDER.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Dropdown Tahun */}
+            <div className="flex items-center gap-1.5">
+              <label htmlFor="filterTahunBulan" className="text-xs font-semibold text-slate-600">
+                Tahun:
+              </label>
+              <select
+                id="filterTahunBulan"
+                value={selectedTahun}
+                onChange={(e) => onTahunChange(e.target.value)}
+                className="text-xs font-bold bg-white hover:bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 cursor-pointer shadow-2xs"
+              >
+                <option value="2026">2026 (Tahun Berjalan)</option>
+                <option value="2025">2025</option>
+                <option value="Semua">Semua Tahun</option>
+                {yearOptions
+                  .filter((y) => y !== '2026' && y !== '2025')
+                  .map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            {/* Tombol Reset Default (2026) */}
+            <button
+              onClick={handleResetDefault}
+              className="no-print inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-all active:scale-95 cursor-pointer ml-1"
+              title="Kembalikan seluruh filter ke periode tahun berjalan: Januari – Oktober 2026"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset Default (2026)</span>
+            </button>
+          </div>
+
+          {/* Active Status Badge */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <span>
+                Periode: {bulanAwal} – {bulanAkhir} {selectedTahun === 'Semua' ? '(Semua Tahun)' : selectedTahun}
+              </span>
+            </span>
+            <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-200/80 text-slate-700">
+              {activeRekapBulan.length} Bulan ({totalDataCount.toLocaleString('id-ID')} Batch)
+            </span>
+          </div>
+        </div>
       </div>
 
-      {/* Visual Analytics Grid with Expandable Cards matching reference screenshot */}
+      {/* 2. Visual Analytics Grid: Grafik Tren Susut & Perbandingan Baku vs Hasil */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         {/* Card 1: Tren Susut Line Chart */}
         <div
-          onClick={() => setMaximizedChart('line')}
+          onClick={() => {
+            if (activeRekapBulan.length > 0) setMaximizedChart('line');
+          }}
           className="bg-white rounded-3xl border border-slate-200/90 shadow-xs p-5 sm:p-6 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group"
         >
           <div>
@@ -85,42 +248,58 @@ export const TabBulan: React.FC<TabBulanProps> = ({ rekapBulan, onExportTabPdf }
                 </span>
               </div>
 
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMaximizedChart('line');
-                }}
-                className="no-print inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors"
-              >
-                <Maximize2 className="w-3 h-3" />
-                <span>Perbesar</span>
-              </button>
+              {activeRekapBulan.length > 0 && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMaximizedChart('line');
+                  }}
+                  className="no-print inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors"
+                >
+                  <Maximize2 className="w-3 h-3" />
+                  <span>Perbesar</span>
+                </button>
+              )}
             </div>
 
-            <InteractiveLineChart
-              data={lineChartData}
-              color="#2563eb"
-              unit="%"
-              height={260}
-              showDataLabels={true}
-            />
+            {activeRekapBulan.length === 0 ? (
+              <div className="h-[260px] flex flex-col items-center justify-center text-slate-400 text-xs bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
+                <Calendar className="w-8 h-8 mb-2 text-slate-300" />
+                <p className="font-semibold text-slate-600">Tidak ada data untuk periode terpilih</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  ({bulanAwal} – {bulanAkhir} {selectedTahun})
+                </p>
+              </div>
+            ) : (
+              <InteractiveLineChart
+                data={lineChartData}
+                color="#2563eb"
+                unit="%"
+                height={260}
+                showDataLabels={true}
+              />
+            )}
           </div>
 
-          {/* Footer Callout matching reference Image 3 */}
-          <div className="no-print mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400 group-hover:text-blue-600 transition-colors">
-            <span className="flex items-center gap-1 text-[11px] font-medium">
-              <Maximize2 className="w-3 h-3" />
-              <span>Klik kartu ini untuk perbesar ke tengah layar</span>
-            </span>
-            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-semibold group-hover:bg-blue-100 group-hover:text-blue-700">
-              Maximize
-            </span>
-          </div>
+          {/* Footer Callout */}
+          {activeRekapBulan.length > 0 && (
+            <div className="no-print mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400 group-hover:text-blue-600 transition-colors">
+              <span className="flex items-center gap-1 text-[11px] font-medium">
+                <Maximize2 className="w-3 h-3" />
+                <span>Klik kartu ini untuk perbesar ke tengah layar</span>
+              </span>
+              <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-semibold group-hover:bg-blue-100 group-hover:text-blue-700">
+                Maximize
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Card 2: Dual Bar Baku vs Hasil */}
         <div
-          onClick={() => setMaximizedChart('bar')}
+          onClick={() => {
+            if (activeRekapBulan.length > 0) setMaximizedChart('bar');
+          }}
           className="bg-white rounded-3xl border border-slate-200/90 shadow-xs p-5 sm:p-6 hover:border-blue-300 hover:shadow-md transition-all cursor-pointer flex flex-col justify-between group"
         >
           <div>
@@ -144,46 +323,62 @@ export const TabBulan: React.FC<TabBulanProps> = ({ rekapBulan, onExportTabPdf }
                   </span>
                 </div>
 
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setMaximizedChart('bar');
-                  }}
-                  className="no-print inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors"
-                >
-                  <Maximize2 className="w-3 h-3" />
-                  <span>Perbesar</span>
-                </button>
+                {activeRekapBulan.length > 0 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setMaximizedChart('bar');
+                    }}
+                    className="no-print inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors"
+                  >
+                    <Maximize2 className="w-3 h-3" />
+                    <span>Perbesar</span>
+                  </button>
+                )}
               </div>
             </div>
 
-            <DualBarChart
-              data={dualBarData}
-              label1="Bahan Baku"
-              label2="Hasil Bersih"
-              height={260}
-              showDataLabels={true}
-            />
+            {activeRekapBulan.length === 0 ? (
+              <div className="h-[260px] flex flex-col items-center justify-center text-slate-400 text-xs bg-slate-50/60 rounded-2xl border border-dashed border-slate-200">
+                <Calendar className="w-8 h-8 mb-2 text-slate-300" />
+                <p className="font-semibold text-slate-600">Tidak ada data untuk periode terpilih</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  ({bulanAwal} – {bulanAkhir} {selectedTahun})
+                </p>
+              </div>
+            ) : (
+              <DualBarChart
+                data={dualBarData}
+                label1="Bahan Baku"
+                label2="Hasil Bersih"
+                height={260}
+                showDataLabels={true}
+              />
+            )}
           </div>
 
-          {/* Footer Callout matching reference Image 3 */}
-          <div className="no-print mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400 group-hover:text-blue-600 transition-colors">
-            <span className="flex items-center gap-1 text-[11px] font-medium">
-              <Maximize2 className="w-3 h-3" />
-              <span>Klik kartu ini untuk perbesar ke tengah layar</span>
-            </span>
-            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-semibold group-hover:bg-blue-100 group-hover:text-blue-700">
-              Maximize
-            </span>
-          </div>
+          {/* Footer Callout */}
+          {activeRekapBulan.length > 0 && (
+            <div className="no-print mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400 group-hover:text-blue-600 transition-colors">
+              <span className="flex items-center gap-1 text-[11px] font-medium">
+                <Maximize2 className="w-3 h-3" />
+                <span>Klik kartu ini untuk perbesar ke tengah layar</span>
+              </span>
+              <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[11px] font-semibold group-hover:bg-blue-100 group-hover:text-blue-700">
+                Maximize
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Card 3: Table Rekap per Bulan */}
+      {/* 3. Card 3: Table Rekap per Bulan */}
       <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden">
-        <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between gap-3">
+        <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <h3 className="font-bold text-sm text-slate-900">Tabel Rekapitulasi per Bulan</h3>
+            <h3 className="font-bold text-sm text-slate-900">
+              Tabel Rekapitulasi per Bulan ({activeRekapBulan.length} Periode Bulan)
+            </h3>
             <p className="text-xs text-slate-500 mt-0.5">
               Rincian kuantitas, rasio kesusutan, fraksi gagang, dan susut air/debu
             </p>
@@ -212,7 +407,7 @@ export const TabBulan: React.FC<TabBulanProps> = ({ rekapBulan, onExportTabPdf }
               {sortedTableBulan.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-8 text-center text-slate-400">
-                    Tidak ada data untuk filter bulan/tahun ini.
+                    Tidak ditemukan data proses pada periode {bulanAwal} – {bulanAkhir} {selectedTahun}. Silakan sesuaikan filter periode di atas atau klik tombol <strong>Reset Default (2026)</strong>.
                   </td>
                 </tr>
               ) : (
@@ -250,7 +445,7 @@ export const TabBulan: React.FC<TabBulanProps> = ({ rekapBulan, onExportTabPdf }
                 ))
               )}
             </tbody>
-            {rekapBulan.length > 0 && (
+            {activeRekapBulan.length > 0 && (
               <tfoot>
                 <tr className="bg-slate-100/90 font-bold text-slate-900 border-t-2 border-slate-300">
                   <td className="py-3 px-4">TOTAL / RATA-RATA</td>
@@ -278,7 +473,7 @@ export const TabBulan: React.FC<TabBulanProps> = ({ rekapBulan, onExportTabPdf }
         isOpen={maximizedChart === 'line'}
         onClose={() => setMaximizedChart(null)}
         title="Tren Susut Rata-rata (%) per Bulan"
-        subtitle="Visualisasi grafik skala penuh ke tengah layar untuk evaluasi presisi"
+        subtitle={`Visualisasi skala penuh periode ${bulanAwal} – ${bulanAkhir} ${selectedTahun}`}
         badge="Total Susut (%)"
       >
         <InteractiveLineChart
@@ -295,7 +490,7 @@ export const TabBulan: React.FC<TabBulanProps> = ({ rekapBulan, onExportTabPdf }
         isOpen={maximizedChart === 'bar'}
         onClose={() => setMaximizedChart(null)}
         title="Perbandingan Bahan Baku vs Hasil per Bulan (Kg)"
-        subtitle="Visualisasi skala penuh perbandingan kuantitas netto baku dan hasil bersih"
+        subtitle={`Visualisasi skala penuh periode ${bulanAwal} – ${bulanAkhir} ${selectedTahun}`}
         badge="Baku vs Hasil"
       >
         <DualBarChart

@@ -48,12 +48,16 @@ export const FilterBar: React.FC<FilterBarProps> = ({
               onChange={(e) => onTahunChange(e.target.value)}
               className="text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 cursor-pointer"
             >
+              <option value="2026">2026 (Tahun Berjalan)</option>
+              <option value="2025">2025</option>
               <option value="Semua">Semua Tahun</option>
-              {filterOptions.tahun.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
+              {filterOptions.tahun
+                .filter((t) => t !== '2026' && t !== '2025')
+                .map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
             </select>
           </div>
 

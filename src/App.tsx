@@ -44,8 +44,8 @@ export default function App() {
   // Active Main Navigation Tab
   const [activeTab, setActiveTab] = useState<NavTab>('overview');
 
-  // Filter States
-  const [selectedTahun, setSelectedTahun] = useState<string>('Semua');
+  // Filter States (Default active year: 2026)
+  const [selectedTahun, setSelectedTahun] = useState<string>('2026');
   const [selectedJenisProses, setSelectedJenisProses] = useState<string>('Semua');
   const [bulanRingkasan, setBulanRingkasan] = useState<string>('Semua');
 
@@ -287,6 +287,11 @@ export default function App() {
               {/* In Overview Mode, show Bulan Tab as primary detailed section */}
               <div className="tab-detail-section">
                 <TabBulan
+                  records={records}
+                  selectedTahun={selectedTahun}
+                  onTahunChange={setSelectedTahun}
+                  selectedJenisProses={selectedJenisProses}
+                  availableYears={dashboardData.filterOptions.tahun}
                   rekapBulan={dashboardData.rekapBulan}
                   onExportTabPdf={handleExportTabPdf}
                 />
@@ -297,6 +302,11 @@ export default function App() {
           {activeTab === 'bulan' && (
             <div className="tab-detail-section">
               <TabBulan
+                records={records}
+                selectedTahun={selectedTahun}
+                onTahunChange={setSelectedTahun}
+                selectedJenisProses={selectedJenisProses}
+                availableYears={dashboardData.filterOptions.tahun}
                 rekapBulan={dashboardData.rekapBulan}
                 onExportTabPdf={handleExportTabPdf}
               />
