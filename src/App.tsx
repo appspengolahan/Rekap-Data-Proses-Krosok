@@ -259,6 +259,8 @@ export default function App() {
             lastUpdated={dashboardData.lastUpdated}
             isSyncing={syncStatus === 'syncing'}
             totalRecordsCount={records.length}
+            autoSyncEnabled={config.autoSyncEnabled}
+            onToggleAutoSync={handleToggleAutoSync}
           />
 
           {/* Tab Content Rendering */}

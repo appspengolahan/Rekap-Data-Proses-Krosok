@@ -124,8 +124,6 @@ export const Header: React.FC<HeaderProps> = ({
             </select>
           </div>
 
-
-
           {/* Role Badge Dropdown */}
           <div className="relative" ref={roleRef}>
             <button
