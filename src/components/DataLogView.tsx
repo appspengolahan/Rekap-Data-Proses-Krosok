@@ -3,6 +3,38 @@ import { Search, Download, ChevronLeft, ChevronRight, Filter } from 'lucide-reac
 import { KrosokRecord } from '../types';
 import { formatNum, formatPct, getPctClass } from '../services/dataService';
 
+const HARI_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+const BULAN_NAMES = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+];
+
+function formatTanggalLengkap(isoDate: string, fallback?: string): string {
+  if (!isoDate) return fallback || '-';
+  try {
+    if (/^\d{4}-\d{2}-\d{2}/.test(isoDate)) {
+      const [yStr, mStr, dStr] = isoDate.split('-');
+      const y = parseInt(yStr, 10);
+      const m = parseInt(mStr, 10) - 1;
+      const d = parseInt(dStr, 10);
+      const dateObj = new Date(y, m, d);
+      if (!isNaN(dateObj.getTime())) {
+        const hari = HARI_NAMES[dateObj.getDay()];
+        const bulanName = BULAN_NAMES[m] || mStr;
+        return `${hari}, ${d} ${bulanName} ${y}`;
+      }
+    }
+    const d = new Date(isoDate);
+    if (!isNaN(d.getTime())) {
+      const hari = HARI_NAMES[d.getDay()];
+      return `${hari}, ${d.getDate()} ${BULAN_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+    }
+  } catch (e) {
+    // fallback
+  }
+  return fallback || isoDate;
+}
+
 interface DataLogViewProps {
   records: KrosokRecord[];
 }
@@ -167,8 +199,7 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records }) => {
             <thead>
               <tr className="bg-slate-50/80 text-slate-500 border-b border-slate-200 uppercase font-semibold text-[10.5px] tracking-wider">
                 <th className="py-3 px-3 text-center">Row</th>
-                <th className="py-3 px-3 text-left">Tanggal Proses</th>
-                <th className="py-3 px-3 text-left">Bulan / Thn</th>
+                <th className="py-3 px-3.5 text-left">Tanggal Proses</th>
                 <th className="py-3 px-4 text-left">Jenis Krosok</th>
                 <th className="py-3 px-2.5 text-center">Jalur</th>
                 <th className="py-3 px-3 text-right">Baku (Kg)</th>
@@ -182,7 +213,7 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records }) => {
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {currentPageRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-8 text-center text-slate-400">
+                  <td colSpan={10} className="py-8 text-center text-slate-400">
                     Tidak ditemukan data yang cocok dengan kriteria pencarian.
                   </td>
                 </tr>
@@ -192,11 +223,8 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records }) => {
                     <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">
                       {r.srcRow}
                     </td>
-                    <td className="py-2.5 px-3 font-medium text-slate-800 whitespace-nowrap">
-                      {r.tanggalDisplay}
-                    </td>
-                    <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">
-                      {r.bulan} {r.tahun}
+                    <td className="py-2.5 px-3.5 font-medium text-slate-800 whitespace-nowrap">
+                      {formatTanggalLengkap(r.tanggal, r.tanggalDisplay)}
                     </td>
                     <td className="py-2.5 px-4 font-semibold text-slate-900">
                       <div>{r.jenisKrosok}</div>
