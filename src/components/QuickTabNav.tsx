@@ -1,5 +1,5 @@
 import React from 'react';
-import { BarChart3, Calendar, Layers, FileSpreadsheet, PlusCircle } from 'lucide-react';
+import { BarChart3, Calendar, Layers, FileSpreadsheet, PlusCircle, AppWindow } from 'lucide-react';
 import { NavTab } from './Sidebar';
 import { UserRole } from '../types';
 
@@ -21,6 +21,7 @@ export const QuickTabNav: React.FC<QuickTabNavProps> = ({
     { id: 'bulan' as NavTab, label: 'Bulan', icon: Calendar },
     { id: 'jenis' as NavTab, label: 'Krosok', icon: Layers },
     { id: 'data_log' as NavTab, label: 'Log Data', icon: FileSpreadsheet },
+    { id: 'switch_app' as NavTab, label: 'Switch', icon: AppWindow },
     ...(canAddEntry ? [{ id: 'new_entry' as NavTab, label: 'Entri', icon: PlusCircle }] : [])
   ];
 

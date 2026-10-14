@@ -4,7 +4,8 @@ import {
   DashboardData,
   GASConfig,
   UserRole,
-  SyncStatus
+  SyncStatus,
+  SwitchAppModule
 } from './types';
 import {
   getCachedRecords,
@@ -16,6 +17,7 @@ import {
   buildDashboardData,
   MONTH_ORDER
 } from './services/dataService';
+import { loadSwitchApps, saveSwitchApps } from './data/switchAppDefault';
 import { Header } from './components/Header';
 import { Sidebar, NavTab } from './components/Sidebar';
 import { QuickTabNav } from './components/QuickTabNav';
@@ -24,6 +26,7 @@ import { SummaryCards } from './components/SummaryCards';
 import { TabBulan } from './components/TabBulan';
 import { TabJenis } from './components/TabJenis';
 import { DataLogView } from './components/DataLogView';
+import { TabSwitchApp } from './components/TabSwitchApp';
 import { GasCenterModal } from './components/GasCenterModal';
 import { NewEntryModal } from './components/NewEntryModal';
 import { HelpModal } from './components/HelpModal';
@@ -60,6 +63,14 @@ export default function App() {
   const [isGasCenterOpen, setIsGasCenterOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isNewEntryOpen, setIsNewEntryOpen] = useState(false);
+
+  // Switch App Modules State (Synchronized across Header dropdown, Sidebar, and Tab Hub)
+  const [switchApps, setSwitchApps] = useState<SwitchAppModule[]>(() => loadSwitchApps());
+
+  const handleUpdateSwitchApps = (newApps: SwitchAppModule[]) => {
+    setSwitchApps(newApps);
+    saveSwitchApps(newApps);
+  };
 
   // Save Role change to localStorage
   const handleRoleChange = (role: UserRole) => {
@@ -222,6 +233,8 @@ export default function App() {
         selectedJenisProses={selectedJenisProses}
         onJenisProsesChange={setSelectedJenisProses}
         entriTerkini={dashboardData.entriTerkini}
+        switchApps={switchApps}
+        onOpenSwitchAppTab={() => setActiveTab('switch_app')}
       />
 
       <div className="flex-1 flex w-full min-h-0 overflow-hidden">
@@ -242,26 +255,29 @@ export default function App() {
           onOpenHelp={() => setIsHelpOpen(true)}
           isOpenMobile={mobileMenuOpen}
           onCloseMobile={() => setMobileMenuOpen(false)}
+          switchAppsCount={switchApps.length}
         />
 
         {/* Main Content Area (Independent scroll) */}
         <main className="flex-1 min-w-0 overflow-y-auto p-3 sm:p-5 lg:p-6 pb-24 md:pb-10">
-          {/* Global Filter Bar */}
-          <FilterBar
-            filterOptions={dashboardData.filterOptions}
-            selectedTahun={selectedTahun}
-            onTahunChange={setSelectedTahun}
-            selectedJenisProses={selectedJenisProses}
-            onJenisProsesChange={setSelectedJenisProses}
-            onRefresh={() => performSync(true)}
-            onExportSummaryPdf={handleExportSummaryPdf}
-            entriTerkini={dashboardData.entriTerkini}
-            lastUpdated={dashboardData.lastUpdated}
-            isSyncing={syncStatus === 'syncing'}
-            totalRecordsCount={records.length}
-            autoSyncEnabled={config.autoSyncEnabled}
-            onToggleAutoSync={handleToggleAutoSync}
-          />
+          {/* Global Filter Bar (Shown on dashboard data tabs) */}
+          {activeTab !== 'switch_app' && (
+            <FilterBar
+              filterOptions={dashboardData.filterOptions}
+              selectedTahun={selectedTahun}
+              onTahunChange={setSelectedTahun}
+              selectedJenisProses={selectedJenisProses}
+              onJenisProsesChange={setSelectedJenisProses}
+              onRefresh={() => performSync(true)}
+              onExportSummaryPdf={handleExportSummaryPdf}
+              entriTerkini={dashboardData.entriTerkini}
+              lastUpdated={dashboardData.lastUpdated}
+              isSyncing={syncStatus === 'syncing'}
+              totalRecordsCount={records.length}
+              autoSyncEnabled={config.autoSyncEnabled}
+              onToggleAutoSync={handleToggleAutoSync}
+            />
+          )}
 
           {/* Tab Content Rendering */}
           {activeTab === 'overview' && (
@@ -353,6 +369,13 @@ export default function App() {
           )}
 
           {activeTab === 'data_log' && <DataLogView records={records} />}
+
+          {activeTab === 'switch_app' && (
+            <TabSwitchApp
+              switchApps={switchApps}
+              onUpdateApps={handleUpdateSwitchApps}
+            />
+          )}
 
           {/* Footer inside scrollable content */}
           <footer className="no-print border-t border-slate-200/80 bg-white/70 py-4 text-center text-xs text-slate-500 mt-10 rounded-2xl">

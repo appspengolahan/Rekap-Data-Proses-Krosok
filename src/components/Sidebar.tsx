@@ -9,11 +9,12 @@ import {
   HelpCircle,
   ChevronLeft,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  AppWindow
 } from 'lucide-react';
 import { UserRole } from '../types';
 
-export type NavTab = 'overview' | 'bulan' | 'jenis' | 'data_log' | 'new_entry';
+export type NavTab = 'overview' | 'bulan' | 'jenis' | 'data_log' | 'new_entry' | 'switch_app';
 
 interface SidebarProps {
   activeTab: NavTab;
@@ -25,6 +26,7 @@ interface SidebarProps {
   onOpenHelp: () => void;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
+  switchAppsCount?: number;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -36,7 +38,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenGasCenter,
   onOpenHelp,
   isOpenMobile,
-  onCloseMobile
+  onCloseMobile,
+  switchAppsCount
 }) => {
   const canAddEntry = currentRole === 'Admin' || currentRole === 'Site Engineer';
 
@@ -65,6 +68,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Log Data Mentah',
       desc: 'Semua Transaksi',
       icon: FileSpreadsheet
+    },
+    {
+      id: 'switch_app' as NavTab,
+      label: 'Switch App Board',
+      desc: 'Portal Modul PP1',
+      icon: AppWindow,
+      badge: switchAppsCount ? `${switchAppsCount} App` : 'Portal'
     },
   ];
 

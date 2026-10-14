@@ -8,7 +8,7 @@ import {
   Shield,
   Menu
 } from 'lucide-react';
-import { UserRole, SyncStatus } from '../types';
+import { UserRole, SyncStatus, SwitchAppModule } from '../types';
 
 interface HeaderProps {
   currentRole: UserRole;
@@ -24,6 +24,8 @@ interface HeaderProps {
   onJenisProsesChange: (proses: string) => void;
   entriTerkini: string | null;
   onExportPdf?: () => void;
+  switchApps: SwitchAppModule[];
+  onOpenSwitchAppTab: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -37,7 +39,9 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleMobileMenu,
   selectedJenisProses,
   onJenisProsesChange,
-  entriTerkini
+  entriTerkini,
+  switchApps,
+  onOpenSwitchAppTab
 }) => {
   const [switchOpen, setSwitchOpen] = useState(false);
   const [roleOpen, setRoleOpen] = useState(false);
@@ -178,73 +182,83 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="relative" ref={switchRef}>
             <button
               onClick={() => setSwitchOpen(!switchOpen)}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors"
-              title="Pindah ke Monitoring Board lain"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors shadow-xs"
+              title="Pindah ke Monitoring Board lain atau buka Switch App Board"
             >
               <Layers className="w-3.5 h-3.5 text-blue-400" />
               <span className="hidden sm:inline">Switch App</span>
-              <ChevronDown className="w-3 h-3 text-slate-400" />
+              <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${switchOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {switchOpen && (
-              <div className="absolute right-0 mt-1.5 w-64 bg-slate-900 text-white rounded-xl shadow-2xl border border-slate-800 py-1.5 z-50 animate-in fade-in slide-in-from-top-1">
-                <div className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-                  Monitoring Board Terkait
-                </div>
-
-                <div className="flex items-center gap-2 px-3 py-2 bg-blue-600/30 text-blue-300 font-bold text-xs border-l-2 border-blue-500">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                  <span>Rekap Susut Krosok</span>
-                  <span className="ml-auto text-[10px] bg-blue-500 text-white px-1.5 py-0.5 rounded font-normal">
-                    Aktif
+              <div className="absolute right-0 mt-1.5 w-72 bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-800 py-2 z-50 animate-in fade-in slide-in-from-top-1 max-h-[80vh] overflow-y-auto">
+                <div className="px-3 py-1 flex items-center justify-between border-b border-slate-800 pb-2 mb-1">
+                  <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+                    Switch App Board PP1
+                  </span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800 font-medium">
+                    {switchApps.length} Modul
                   </span>
                 </div>
 
-                <a
-                  href="https://rekap-data-proses-blend-pro-api-eng.vercel.app/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 transition-colors"
-                >
-                  <span>Rekap Susut Blend</span>
-                  <ExternalLink className="w-3 h-3 text-slate-400" />
-                </a>
+                {/* Group by category */}
+                {Array.from(new Set(switchApps.map((a) => a.category))).map((cat, catIdx) => {
+                  const appsInCat = switchApps.filter((a) => a.category === cat);
+                  return (
+                    <div key={cat} className={catIdx > 0 ? 'mt-2 pt-2 border-t border-slate-800/80' : ''}>
+                      <div className="px-3 py-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+                        {cat}
+                      </div>
 
-                <a
-                  href="https://rekap-data-proses-cengkeh-pro-api-l.vercel.app/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 transition-colors"
-                >
-                  <span>Rekap Susut Cengkeh</span>
-                  <ExternalLink className="w-3 h-3 text-slate-400" />
-                </a>
+                      {appsInCat.map((app) => {
+                        if (app.isActive) {
+                          return (
+                            <div
+                              key={app.id}
+                              className="flex items-center gap-2 px-3 py-2 bg-emerald-950/40 text-emerald-300 font-bold text-xs border-l-2 border-emerald-500 my-0.5"
+                            >
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0"></span>
+                              <span className="truncate">{app.title}</span>
+                              <span className="ml-auto text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-normal shrink-0">
+                                Aktif
+                              </span>
+                            </div>
+                          );
+                        }
 
-                <a
-                  href="https://rekap-dataproses-tembakau-pro.vercel.app/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 transition-colors"
-                >
-                  <span>Rekap Susut Tembakau</span>
-                  <ExternalLink className="w-3 h-3 text-slate-400" />
-                </a>
+                        return (
+                          <a
+                            key={app.id}
+                            href={app.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-between px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors group"
+                            title={app.description || app.url}
+                          >
+                            <span className="truncate pr-2 group-hover:translate-x-0.5 transition-transform">
+                              {app.title}
+                            </span>
+                            <ExternalLink className="w-3.5 h-3.5 text-slate-500 group-hover:text-blue-400 transition-colors shrink-0" />
+                          </a>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
 
-                <div className="my-1 border-t border-slate-800"></div>
-
-                <div className="px-3 py-1 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
-                  Sistem Gudang & Logistik
+                {/* Footer Link to open Switch App Tab in Sidebar / Content */}
+                <div className="mt-2 pt-2 border-t border-slate-800 px-2">
+                  <button
+                    onClick={() => {
+                      setSwitchOpen(false);
+                      onOpenSwitchAppTab();
+                    }}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 transition-all"
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>Kelola & Buka Switch App Board</span>
+                  </button>
                 </div>
-
-                <a
-                  href="https://script.google.com/macros/s/AKfycbywAsu-wvbBxWwl2P9YojeZgR13U3BR9cS8THDCGE9EMINUXIIcR1HjoAK59W1Aqm1lYQ/exec"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-between px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 transition-colors"
-                >
-                  <span>Monitoring Stock Persediaan PP1</span>
-                  <ExternalLink className="w-3 h-3 text-slate-400" />
-                </a>
               </div>
             )}
           </div>

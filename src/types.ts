@@ -84,3 +84,15 @@ export interface GASConfig {
 }
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'offline';
+
+export interface SwitchAppModule {
+  id: string;
+  title: string;
+  url: string;
+  category: string;
+  description?: string;
+  isActive?: boolean;
+  isCustom?: boolean;
+  color?: string;
+  updatedAt?: string;
+}
