@@ -20,7 +20,7 @@ export const QuickTabNav: React.FC<QuickTabNavProps> = ({
     { id: 'overview' as NavTab, label: 'Ringkasan', icon: BarChart3 },
     { id: 'bulan' as NavTab, label: 'Bulan', icon: Calendar },
     { id: 'jenis' as NavTab, label: 'Krosok', icon: Layers },
-    { id: 'data_log' as NavTab, label: 'Log Data', icon: FileSpreadsheet },
+    { id: 'data_log' as NavTab, label: 'Log Harian', icon: FileSpreadsheet },
     { id: 'switch_app' as NavTab, label: 'Switch', icon: AppWindow },
     ...(canAddEntry ? [{ id: 'new_entry' as NavTab, label: 'Entri', icon: PlusCircle }] : [])
   ];

@@ -65,7 +65,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'data_log' as NavTab,
-      label: 'Log Data Mentah',
+      label: 'Log Data Harian',
       desc: 'Semua Transaksi',
       icon: FileSpreadsheet
     },
