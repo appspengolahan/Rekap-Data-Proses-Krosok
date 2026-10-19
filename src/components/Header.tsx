@@ -6,7 +6,8 @@ import {
   Layers,
   Database,
   Shield,
-  Menu
+  Menu,
+  Zap
 } from 'lucide-react';
 import { UserRole, SyncStatus, SwitchAppModule } from '../types';
 
@@ -18,6 +19,8 @@ interface HeaderProps {
   onToggleAutoSync: () => void;
   onManualRefresh?: () => void;
   onOpenGasCenter: () => void;
+  onOpenDhpIntegrasi?: () => void;
+  dhpCount?: number;
   onOpenHelp: () => void;
   onToggleMobileMenu: () => void;
   selectedJenisProses: string;
@@ -41,7 +44,9 @@ export const Header: React.FC<HeaderProps> = ({
   onJenisProsesChange,
   entriTerkini,
   switchApps,
-  onOpenSwitchAppTab
+  onOpenSwitchAppTab,
+  onOpenDhpIntegrasi,
+  dhpCount
 }) => {
   const [switchOpen, setSwitchOpen] = useState(false);
   const [roleOpen, setRoleOpen] = useState(false);
@@ -167,6 +172,23 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             )}
           </div>
+
+          {/* Integrasi DHP Trigger */}
+          {onOpenDhpIntegrasi && (
+            <button
+              onClick={onOpenDhpIntegrasi}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-amber-200 bg-amber-950/60 hover:bg-amber-900/60 border border-amber-700/60 transition-all shadow-xs"
+              title="Integrasi & Sinkronisasi DHP Krosok"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400/20" />
+              <span className="hidden md:inline">Integrasi DHP</span>
+              {typeof dhpCount === 'number' && dhpCount > 0 && (
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full font-bold bg-amber-400 text-slate-950">
+                  {dhpCount}
+                </span>
+              )}
+            </button>
+          )}
 
           {/* Headless GAS Center Trigger */}
           <button

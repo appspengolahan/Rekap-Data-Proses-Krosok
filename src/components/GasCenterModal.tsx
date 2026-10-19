@@ -260,23 +260,23 @@ function doPost(e) {
             <div className="space-y-4 text-xs">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  ID Google Spreadsheet Sumber
+                  ID Google Spreadsheet Rekap (Target Rekapitulasi)
                 </label>
                 <input
                   type="text"
                   value={formData.spreadsheetId}
                   onChange={(e) => setFormData({ ...formData, spreadsheetId: e.target.value })}
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 font-mono text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                  placeholder="ID Spreadsheet..."
+                  placeholder="ID Spreadsheet Rekap..."
                 />
                 <span className="text-[11px] text-slate-400 mt-0.5 block">
-                  Sheet ID sumber data: 1A9GgHirYSNN26fG4emsFNOM4pod8xjn4gleWzCaTVzM
+                  Default: 1A9GgHirYSNN26fG4emsFNOM4pod8xjn4gleWzCaTVzM (Tab: {formData.sheetName})
                 </span>
               </div>
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
-                  Nama Tab Sheet
+                  Nama Tab Sheet Rekap
                 </label>
                 <input
                   type="text"
@@ -285,9 +285,35 @@ function doPost(e) {
                   className="w-full px-3 py-2 rounded-xl border border-slate-300 font-mono text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   placeholder="REKAP SUSUT KROSOK"
                 />
-                <span className="text-[11px] text-slate-400 mt-0.5 block">
-                  Harus persis sama: <b>REKAP SUSUT KROSOK</b>
+              </div>
+
+              <div className="pt-2 border-t border-slate-100">
+                <label className="block font-semibold text-slate-700 mb-1">
+                  ID Google Spreadsheet DHP Krosok (Sumber Data Proses Aktif)
+                </label>
+                <input
+                  type="text"
+                  value={formData.dhpSpreadsheetId || ''}
+                  onChange={(e) => setFormData({ ...formData, dhpSpreadsheetId: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 font-mono text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  placeholder="1tyE6QWZOPhjLCsjvesU82QePF5RqEBToJsp1m0qQY_w"
+                />
+                <span className="text-[11px] text-amber-700 mt-0.5 block font-medium">
+                  Default: 1tyE6QWZOPhjLCsjvesU82QePF5RqEBToJsp1m0qQY_w (Tab: {formData.dhpSheetName || 'INTEGRASI DATA'})
                 </span>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Nama Tab Sheet DHP Krosok
+                </label>
+                <input
+                  type="text"
+                  value={formData.dhpSheetName || ''}
+                  onChange={(e) => setFormData({ ...formData, dhpSheetName: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl border border-slate-300 font-mono text-xs focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  placeholder="INTEGRASI DATA"
+                />
               </div>
 
               <div>

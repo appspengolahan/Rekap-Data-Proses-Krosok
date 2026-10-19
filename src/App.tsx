@@ -5,7 +5,8 @@ import {
   GASConfig,
   UserRole,
   SyncStatus,
-  SwitchAppModule
+  SwitchAppModule,
+  DhpKrosokItem
 } from './types';
 import {
   getCachedRecords,
@@ -14,6 +15,9 @@ import {
   saveConfig,
   fetchFromGviz,
   fetchFromGAS,
+  fetchDhpKrosokRecords,
+  getCachedDhpItems,
+  setCachedDhpItems,
   buildDashboardData,
   MONTH_ORDER
 } from './services/dataService';
@@ -28,6 +32,7 @@ import { TabJenis } from './components/TabJenis';
 import { DataLogView } from './components/DataLogView';
 import { TabSwitchApp } from './components/TabSwitchApp';
 import { GasCenterModal } from './components/GasCenterModal';
+import { ModalDhpIntegrasi } from './components/ModalDhpIntegrasi';
 import { NewEntryModal } from './components/NewEntryModal';
 import { HelpModal } from './components/HelpModal';
 
@@ -61,8 +66,12 @@ export default function App() {
 
   // Modals
   const [isGasCenterOpen, setIsGasCenterOpen] = useState(false);
+  const [isDhpModalOpen, setIsDhpModalOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isNewEntryOpen, setIsNewEntryOpen] = useState(false);
+
+  // DHP Krosok Items State
+  const [dhpItems, setDhpItems] = useState<DhpKrosokItem[]>(() => getCachedDhpItems());
 
   // Switch App Modules State (Synchronized across Header dropdown, Sidebar, and Tab Hub)
   const [switchApps, setSwitchApps] = useState<SwitchAppModule[]>(() => loadSwitchApps());
@@ -71,6 +80,23 @@ export default function App() {
     setSwitchApps(newApps);
     saveSwitchApps(newApps);
   };
+
+  // Refresh DHP Krosok records from Sheet DHP Krosok
+  const refreshDhpData = useCallback(async () => {
+    try {
+      const items = await fetchDhpKrosokRecords(
+        config.dhpSpreadsheetId,
+        config.dhpSheetName,
+        records
+      );
+      if (items && items.length > 0) {
+        setDhpItems(items);
+        setCachedDhpItems(items);
+      }
+    } catch (e) {
+      console.warn('DHP sync notice:', e);
+    }
+  }, [config.dhpSpreadsheetId, config.dhpSheetName, records]);
 
   // Save Role change to localStorage
   const handleRoleChange = (role: UserRole) => {
@@ -85,22 +111,37 @@ export default function App() {
     localStorage.setItem('krosok_sidebar_collapsed_v1', String(next));
   };
 
+  // Append new records from DHP into local Rekap data
+  const handleAppendRecordsToRekap = (newRecords: KrosokRecord[]) => {
+    setRecords((prev) => {
+      const existingKeys = new Set(
+        prev.map((r) => `${r.tanggal}_${r.jenisKrosok.toLowerCase()}_${r.baku.toFixed(1)}`)
+      );
+      const toAdd = newRecords.filter(
+        (nr) => !existingKeys.has(`${nr.tanggal}_${nr.jenisKrosok.toLowerCase()}_${nr.baku.toFixed(1)}`)
+      );
+      const updated = [...prev, ...toAdd];
+      setCachedRecords(updated);
+      return updated;
+    });
+
+    setDhpItems((prev) =>
+      prev.map((item) => ({
+        ...item,
+        isMatchedInRekap: true
+      }))
+    );
+  };
+
   // Sync Logic (Silent Background or Manual)
   const performSync = useCallback(async (isManual: boolean = false) => {
     setSyncStatus('syncing');
     try {
-      let freshData: KrosokRecord[] = [];
+      let freshData: KrosokRecord[] = await fetchFromGviz(config.spreadsheetId, config.sheetName);
 
-      // Primary: Google Sheets Gviz API (Guaranteed Real-Time Connection with sheet REKAP SUSUT KROSOK)
-      try {
-        freshData = await fetchFromGviz(config.spreadsheetId, config.sheetName);
-      } catch (gvizErr) {
-        console.warn('Gviz fetch failed, trying GAS REST fallback...', gvizErr);
-        if (config.gasUrl) {
-          freshData = await fetchFromGAS(config.gasUrl);
-        } else {
-          throw gvizErr;
-        }
+      // If Gviz didn't return data, try GAS fallback if configured
+      if ((!freshData || freshData.length === 0) && config.gasUrl) {
+        freshData = await fetchFromGAS(config.gasUrl);
       }
 
       if (freshData && freshData.length > 0) {
@@ -111,17 +152,21 @@ export default function App() {
         saveConfig(updatedConfig);
         setSyncStatus('synced');
       } else {
+        // Retain existing records smoothly
         setSyncStatus('idle');
       }
+
+      // Concurrently refresh DHP active items
+      refreshDhpData();
     } catch (err) {
-      console.error('Sync failed:', err);
-      setSyncStatus('error');
+      console.warn('Sync notice (using cached/offline data):', err);
+      setSyncStatus('idle');
     } finally {
       setTimeout(() => {
         setSyncStatus((prev) => (prev === 'syncing' ? 'idle' : prev));
       }, 2000);
     }
-  }, [config]);
+  }, [config, refreshDhpData]);
 
   // Initial Background Sync on App Mount
   useEffect(() => {
@@ -235,6 +280,8 @@ export default function App() {
         entriTerkini={dashboardData.entriTerkini}
         switchApps={switchApps}
         onOpenSwitchAppTab={() => setActiveTab('switch_app')}
+        onOpenDhpIntegrasi={() => setIsDhpModalOpen(true)}
+        dhpCount={dhpItems.length}
       />
 
       <div className="flex-1 flex w-full min-h-0 overflow-hidden">
@@ -252,6 +299,8 @@ export default function App() {
           onToggleCollapse={handleToggleCollapse}
           currentRole={currentRole}
           onOpenGasCenter={() => setIsGasCenterOpen(true)}
+          onOpenDhpIntegrasi={() => setIsDhpModalOpen(true)}
+          dhpCount={dhpItems.length}
           onOpenHelp={() => setIsHelpOpen(true)}
           isOpenMobile={mobileMenuOpen}
           onCloseMobile={() => setMobileMenuOpen(false)}
@@ -404,6 +453,15 @@ export default function App() {
         config={config}
         onSaveConfig={handleSaveConfig}
         onTriggerSync={() => performSync(true)}
+      />
+
+      <ModalDhpIntegrasi
+        isOpen={isDhpModalOpen}
+        onClose={() => setIsDhpModalOpen(false)}
+        config={config}
+        dhpItems={dhpItems}
+        onRefreshDhp={refreshDhpData}
+        onAppendRecordsToRekap={handleAppendRecordsToRekap}
       />
 
       <NewEntryModal

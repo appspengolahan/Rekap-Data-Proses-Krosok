@@ -10,7 +10,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
-  AppWindow
+  AppWindow,
+  Zap
 } from 'lucide-react';
 import { UserRole } from '../types';
 
@@ -23,6 +24,8 @@ interface SidebarProps {
   onToggleCollapse: () => void;
   currentRole: UserRole;
   onOpenGasCenter: () => void;
+  onOpenDhpIntegrasi?: () => void;
+  dhpCount?: number;
   onOpenHelp: () => void;
   isOpenMobile: boolean;
   onCloseMobile: () => void;
@@ -36,6 +39,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleCollapse,
   currentRole,
   onOpenGasCenter,
+  onOpenDhpIntegrasi,
+  dhpCount,
   onOpenHelp,
   isOpenMobile,
   onCloseMobile,
@@ -221,6 +226,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {/* Secondary Tools Section */}
           <div className="pt-3 mt-3 border-t border-slate-800/80 space-y-1.5">
+            {onOpenDhpIntegrasi && (
+              <button
+                onClick={() => {
+                  onOpenDhpIntegrasi();
+                  onCloseMobile();
+                }}
+                title={collapsed ? 'Integrasi DHP Krosok' : undefined}
+                className={`flex items-center transition-colors ${
+                  collapsed
+                    ? 'w-11 h-11 mx-auto rounded-xl justify-center text-amber-300 hover:text-white hover:bg-amber-950/50'
+                    : 'w-full gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-amber-300 hover:text-white hover:bg-amber-950/50 border border-amber-800/30'
+                }`}
+              >
+                <Zap className="w-5 h-5 text-amber-400 shrink-0 fill-amber-400/20" />
+                {!collapsed && (
+                  <div className="text-left flex-1 min-w-0">
+                    <div className="truncate flex items-center justify-between">
+                      <span>Integrasi DHP Krosok</span>
+                      {typeof dhpCount === 'number' && dhpCount > 0 && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded-full font-bold bg-amber-400 text-slate-950">
+                          {dhpCount}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[10px] text-amber-400/70 truncate">Tarik & Sinkronkan</div>
+                  </div>
+                )}
+              </button>
+            )}
+
             <button
               onClick={() => {
                 onOpenGasCenter();

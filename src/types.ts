@@ -78,12 +78,36 @@ export interface GASConfig {
   gasUrl: string;
   spreadsheetId: string;
   sheetName: string;
+  dhpSpreadsheetId: string;
+  dhpSheetName: string;
   autoSyncEnabled: boolean;
   autoSyncIntervalSeconds: number;
   lastSyncTimestamp: number | null;
 }
 
 export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'offline';
+
+export interface DhpKrosokItem {
+  id: string;
+  rowIdx: number;
+  tanggal: string; // YYYY-MM-DD
+  tanggalDisplay: string; // e.g. Senin, 19 Oktober 2026
+  bulan: string;
+  tahun: string;
+  jenisTembakau: string;
+  jenisKrosokMaster?: string;
+  kodeStock?: string;
+  waktu?: string;
+  baku: number;
+  hasil: number;
+  gagangKg: number;
+  debuKg: number;
+  susutKg: number;
+  susutPct: number;
+  jalurProses: 'SKT' | 'SKM' | string;
+  isMatchedInRekap: boolean;
+  matchedRow?: number;
+}
 
 export interface SwitchAppModule {
   id: string;
