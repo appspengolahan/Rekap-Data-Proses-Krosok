@@ -219,9 +219,9 @@ function syncDhpToRekap() {
         rowsToAppend.push([
           '', // Kolom A: kosong/nomor
           dateObj, // Kolom B: Tanggal
-          bulanName, // Kolom C: Bulan
-          tahunStr, // Kolom D: Tahun
-          '=IFERROR(JOIN(" ", F' + nextRowNum + ', G' + nextRowNum + '))', // Kolom E: Rumus JOIN Dinamis (Preservasi Penuh)
+          '', // Kolom C: Rumus Bulan (Disalin dari baris atas)
+          '', // Kolom D: Rumus Tahun (Disalin dari baris atas)
+          '', // Kolom E: Rumus JOIN (Disalin dari baris atas)
           rawTembakau, // Kolom F: Jenis Tembakau
           jalur, // Kolom G: Jalur (SKT/SKM)
           rawBaku, // Kolom H: Netto Baku (Kg)
@@ -240,16 +240,16 @@ function syncDhpToRekap() {
   if (rowsToAppend.length > 0) {
     shRekap.getRange(lastRow + 1, 1, rowsToAppend.length, rowsToAppend[0].length).setValues(rowsToAppend);
     
-    // Proteksi Kolom E: Salin rumus asli =iferror(JOIN(...)) dari baris sebelumnya
+    // Proteksi Rumus Kolom C, D, dan E (3 kolom): Salin rumus asli dari baris sebelumnya
     if (lastRow >= 12) {
-      shRekap.getRange(lastRow, 5).copyTo(
-        shRekap.getRange(lastRow + 1, 5, rowsToAppend.length, 1),
+      shRekap.getRange(lastRow, 3, 1, 3).copyTo(
+        shRekap.getRange(lastRow + 1, 3, rowsToAppend.length, 3),
         SpreadsheetApp.CopyPasteType.PASTE_FORMULA,
         false
       );
     }
     
-    SpreadsheetApp.getActiveSpreadsheet().toast('Berhasil membukukan ' + rowsToAppend.length + ' baris dari DHP langsung di bawah tanggal terbaru!', 'Sukses', 4);
+    SpreadsheetApp.getActiveSpreadsheet().toast('Berhasil membukukan ' + rowsToAppend.length + ' baris dari DHP! Rumus Kolom C, D, E terjaga.', 'Sukses', 4);
   } else {
     SpreadsheetApp.getActiveSpreadsheet().toast('Semua data DHP sudah tercatat di Rekap (0 baris baru).', 'Info', 4);
   }
