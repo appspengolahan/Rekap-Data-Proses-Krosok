@@ -291,43 +291,31 @@ export async function fetchDhpKrosokRecords(
         // Kolom I (Index 8) adalah HASIL PROSES riil di DHP
         const rawHasil = typeof c[8]?.v === 'number' ? c[8]?.v : (typeof c[8]?.v === 'string' ? parseFloat(c[8]?.v.replace(',', '.')) : NaN);
         const rawSusutKg = typeof c[9]?.v === 'number' ? c[9]?.v : (typeof c[9]?.v === 'string' ? parseFloat(c[9]?.v.replace(',', '.')) : NaN);
-        const rawSusutPct = typeof c[10]?.v === 'number' ? c[10]?.v : (typeof c[10]?.v === 'string' ? parseFloat(c[10]?.v.replace('%', '').replace(',', '.')) : NaN);
 
-        // Susut (%) dari DHP
-        let susutPct = !isNaN(rawSusutPct)
-          ? round2(rawSusutPct > 1 ? rawSusutPct : rawSusutPct * 100)
-          : 0;
-
-        let hasil = 0;
+        // 1. Tentukan Susut (Kg) & Netto Hasil (Kg) secara akurat
         let susutKg = 0;
+        let hasil = 0;
 
-        if (!isNaN(rawHasil) && rawHasil > 0) {
-          // 1. Jika Kolom I memiliki nilai riil > 0
-          hasil = round2(rawHasil);
-          susutKg = !isNaN(rawSusutKg) && rawSusutKg !== 0 ? round2(rawSusutKg) : round2(baku - hasil);
-          if (susutPct === 0 && baku > 0) {
-            susutPct = round2((susutKg / baku) * 100);
-          }
-        } else if (susutPct !== 0 && Math.abs(susutPct) < 100) {
-          // 2. Jika Hasil di DHP masih 0 / kosong tetapi Susut (%) sudah terisi (misal 8.25%)
-          susutKg = round2(baku * (susutPct / 100));
-          hasil = round2(baku - susutKg);
-        } else if (!isNaN(rawSusutKg) && rawSusutKg > 0 && rawSusutKg < baku) {
-          // 3. Jika Susut (Kg) tersedia
+        if (!isNaN(rawSusutKg)) {
+          // Jika Kolom J (Susut Kg) ada di DHP
           susutKg = round2(rawSusutKg);
-          hasil = round2(baku - susutKg);
-          susutPct = round2((susutKg / baku) * 100);
-        } else if ((gagangKg + airKg + debuKg) > 0 && (gagangKg + airKg + debuKg) < baku) {
-          // 4. Jika pecahan proses (gagang, air, debu) terisi
+          hasil = !isNaN(rawHasil) && rawHasil > 0 ? round2(rawHasil) : round2(baku - susutKg);
+        } else if (!isNaN(rawHasil) && rawHasil > 0) {
+          // Jika hanya Kolom I (Hasil) yang ada di DHP
+          hasil = round2(rawHasil);
+          susutKg = round2(baku - hasil);
+        } else if ((gagangKg + airKg + debuKg) > 0) {
+          // Jika pecahan proses tersedia
           susutKg = round2(gagangKg + airKg + debuKg);
           hasil = round2(baku - susutKg);
-          susutPct = round2((susutKg / baku) * 100);
         } else {
-          // 5. Batch belum selesai / baru terdaftar
-          hasil = 0;
-          susutKg = baku;
-          susutPct = 100;
+          hasil = baku;
+          susutKg = 0;
         }
+
+        // 2. RUMUS SUSUT (%) PRESISI: (Susut Kg / Netto Baku) * 100%
+        // Sesuai dengan rumus asli di Kolom K Sheet Rekap (=J... / H...)
+        const susutPct = baku > 0 ? round2((susutKg / baku) * 100) : 0;
 
         const tembakauStr = String(rawTembakau).trim();
         const jalurProses: 'SKT' | 'SKM' = tembakauStr.toUpperCase().includes('SKM') ? 'SKM' : 'SKT';
@@ -385,7 +373,21 @@ export function getCachedDhpItems(): DhpKrosokItem[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        return parsed.map((item: DhpKrosokItem) => {
+          const baku = Number(item.baku) || 0;
+          const hasil = Number(item.hasil) || 0;
+          // Rumus presisi: Susut Kg = Netto Baku - Netto Hasil
+          const susutKg = hasil > 0 ? round2(baku - hasil) : (Number(item.susutKg) || 0);
+          // Rumus presisi: Susut % = (Susut Kg / Netto Baku) * 100%
+          const susutPct = baku > 0 ? round2((susutKg / baku) * 100) : 0;
+          return {
+            ...item,
+            baku,
+            hasil,
+            susutKg,
+            susutPct
+          };
+        });
       }
     }
   } catch (e) {
@@ -393,80 +395,142 @@ export function getCachedDhpItems(): DhpKrosokItem[] {
   }
   return [
     {
-      id: 'dhp_7_2026-10-19_1097.7',
+      id: 'dhp_7_2026-10-20_969.4',
       rowIdx: 7,
-      tanggal: '2026-10-19',
-      tanggalDisplay: '19 Oktober 2026',
+      tanggal: '2026-10-20',
+      tanggalDisplay: '20 Oktober 2026',
       bulan: 'Oktober',
       tahun: '2026',
-      jenisTembakau: 'Zimbabwe B1L (2023)',
+      jenisTembakau: 'Lombok 2024 (BE) - 1',
       waktu: '14:52 - 14:53',
-      baku: 1097.7,
-      hasil: 1007.1,
-      gagangKg: 72.4,
-      debuKg: 18.2,
-      susutKg: 90.6,
-      susutPct: 8.25,
+      baku: 969.4,
+      hasil: 968.6,
+      gagangKg: 0,
+      debuKg: 0,
+      susutKg: 0.8,
+      susutPct: 0.08,
       jalurProses: 'SKT',
       isMatchedInRekap: true,
-      matchedRow: 143
+      matchedRow: 952
     },
     {
-      id: 'dhp_8_2026-10-19_802.9',
+      id: 'dhp_8_2026-10-20_272.4',
       rowIdx: 8,
-      tanggal: '2026-10-19',
-      tanggalDisplay: '19 Oktober 2026',
+      tanggal: '2026-10-20',
+      tanggalDisplay: '20 Oktober 2026',
       bulan: 'Oktober',
       tahun: '2026',
-      jenisTembakau: 'Zimbabwe 2025 (HR) L1OF',
+      jenisTembakau: 'Lombok 2024 (FS) - 1',
+      kodeStock: '1.3.34.20A',
       waktu: '14:53 - 14:53',
-      baku: 802.9,
-      hasil: 738.7,
-      gagangKg: 52.8,
-      debuKg: 11.4,
-      susutKg: 64.2,
-      susutPct: 8.0,
+      baku: 272.4,
+      hasil: 271.9,
+      gagangKg: 0,
+      debuKg: 0,
+      susutKg: 0.5,
+      susutPct: 0.18,
       jalurProses: 'SKT',
       isMatchedInRekap: true,
-      matchedRow: 144
+      matchedRow: 953
     },
     {
-      id: 'dhp_9_2026-10-19_1046.7',
+      id: 'dhp_9_2026-10-20_804.0',
       rowIdx: 9,
-      tanggal: '2026-10-19',
-      tanggalDisplay: '19 Oktober 2026',
+      tanggal: '2026-10-20',
+      tanggalDisplay: '20 Oktober 2026',
       bulan: 'Oktober',
       tahun: '2026',
-      jenisTembakau: 'Zimbabwe M1L (2023)',
+      jenisTembakau: 'Amerika 2025 (BO1)',
+      kodeStock: '1.3.66.1',
       waktu: '14:54 - 14:54',
-      baku: 1046.7,
-      hasil: 960.9,
-      gagangKg: 68.3,
-      debuKg: 17.5,
-      susutKg: 85.8,
-      susutPct: 8.2,
+      baku: 804.0,
+      hasil: 804.1,
+      gagangKg: 0,
+      debuKg: 0,
+      susutKg: -0.1,
+      susutPct: -0.01,
       jalurProses: 'SKT',
       isMatchedInRekap: true,
-      matchedRow: 145
+      matchedRow: 954
     },
     {
-      id: 'dhp_10_2026-10-19_699.7',
+      id: 'dhp_10_2026-10-20_356.4',
       rowIdx: 10,
-      tanggal: '2026-10-19',
-      tanggalDisplay: '19 Oktober 2026',
+      tanggal: '2026-10-20',
+      tanggalDisplay: '20 Oktober 2026',
       bulan: 'Oktober',
       tahun: '2026',
-      jenisTembakau: 'Brazil 2025 (BOA)',
+      jenisTembakau: 'Kasturi 2023 (ST)',
+      kodeStock: '1.3.69.01T',
       waktu: '14:54 - 14:55',
-      baku: 699.7,
-      hasil: 642.3,
-      gagangKg: 45.2,
-      debuKg: 12.2,
-      susutKg: 57.4,
-      susutPct: 8.2,
+      baku: 356.4,
+      hasil: 355.4,
+      gagangKg: 0,
+      debuKg: 0,
+      susutKg: 1.0,
+      susutPct: 0.28,
       jalurProses: 'SKT',
       isMatchedInRekap: true,
-      matchedRow: 146
+      matchedRow: 955
+    },
+    {
+      id: 'dhp_11_2026-10-20_91.9',
+      rowIdx: 11,
+      tanggal: '2026-10-20',
+      tanggalDisplay: '20 Oktober 2026',
+      bulan: 'Oktober',
+      tahun: '2026',
+      jenisTembakau: 'Janturan Jombang 2024 (MYN)',
+      kodeStock: '1.3.10.18T',
+      waktu: '14:20 - 14:20',
+      baku: 91.9,
+      hasil: 91.6,
+      gagangKg: 0,
+      debuKg: 0,
+      susutKg: 0.3,
+      susutPct: 0.33,
+      jalurProses: 'SKT',
+      isMatchedInRekap: true,
+      matchedRow: 956
+    },
+    {
+      id: 'dhp_12_2026-10-20_161.3',
+      rowIdx: 12,
+      tanggal: '2026-10-20',
+      tanggalDisplay: '20 Oktober 2026',
+      bulan: 'Oktober',
+      tahun: '2026',
+      jenisTembakau: 'Hang Boyolali 2024 (FS)',
+      kodeStock: '1.3.10.17',
+      waktu: '14:20 - 14:20',
+      baku: 161.3,
+      hasil: 161.1,
+      gagangKg: 0,
+      debuKg: 0,
+      susutKg: 0.2,
+      susutPct: 0.12,
+      jalurProses: 'SKT',
+      isMatchedInRekap: true,
+      matchedRow: 957
+    },
+    {
+      id: 'dhp_13_2026-10-20_468.1',
+      rowIdx: 13,
+      tanggal: '2026-10-20',
+      tanggalDisplay: '20 Oktober 2026',
+      bulan: 'Oktober',
+      tahun: '2026',
+      jenisTembakau: 'Krs. Garut 2025 (MYN)',
+      waktu: '14:21 - 14:21',
+      baku: 468.1,
+      hasil: 468.9,
+      gagangKg: 0,
+      debuKg: 0,
+      susutKg: -0.8,
+      susutPct: -0.17,
+      jalurProses: 'SKT',
+      isMatchedInRekap: true,
+      matchedRow: 958
     }
   ];
 }
