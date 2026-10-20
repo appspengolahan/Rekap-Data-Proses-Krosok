@@ -196,15 +196,14 @@ function syncDhpToRekap() {
         const debu = Number(row[7]) || 0; // Kolom H
         const susut = Number(row[9]) || (rawBaku - hasil); // Kolom J
         const susutPct = rawBaku > 0 ? (susut / rawBaku) : 0;
-        const jalur = rawTembakau.toUpperCase().includes('SKM') ? 'SKM' : 'SKT';
-
+        const nextRowNum = lastRow + 1 + rowsToAppend.length;
         // Susun baris presisi sesuai kolom B s/d N di REKAP SUSUT KROSOK
         rowsToAppend.push([
           '', // Kolom A: kosong/nomor
           dateObj, // Kolom B: Tanggal
           bulanName, // Kolom C: Bulan
           tahunStr, // Kolom D: Tahun
-          rawTembakau + ' ' + jalur, // Kolom E: Jenis Tembakau/Perlakuan
+          '=IFERROR(JOIN(" ", F' + nextRowNum + ', G' + nextRowNum + '))', // Kolom E: Rumus JOIN Dinamis (Preservasi Penuh)
           rawTembakau, // Kolom F: Jenis Tembakau
           jalur, // Kolom G: Jalur (SKT/SKM)
           rawBaku, // Kolom H: Netto Baku (Kg)
@@ -223,7 +222,17 @@ function syncDhpToRekap() {
   if (rowsToAppend.length > 0) {
     const lastRow = shRekap.getLastRow();
     shRekap.getRange(lastRow + 1, 1, rowsToAppend.length, rowsToAppend[0].length).setValues(rowsToAppend);
-    SpreadsheetApp.getActiveSpreadsheet().toast('Berhasil membukukan ' + rowsToAppend.length + ' baris dari DHP!', 'Sukses', 4);
+    
+    // Proteksi Kolom E: Salin rumus asli =iferror(JOIN(...)) dari baris sebelumnya
+    if (lastRow >= 12) {
+      shRekap.getRange(lastRow, 5).copyTo(
+        shRekap.getRange(lastRow + 1, 5, rowsToAppend.length, 1),
+        SpreadsheetApp.CopyPasteType.PASTE_FORMULA,
+        false
+      );
+    }
+    
+    SpreadsheetApp.getActiveSpreadsheet().toast('Berhasil membukukan ' + rowsToAppend.length + ' baris dari DHP! Rumus Kolom E terjaga.', 'Sukses', 4);
   } else {
     SpreadsheetApp.getActiveSpreadsheet().toast('Semua data DHP sudah tercatat di Rekap (0 baris baru).', 'Info', 4);
   }
@@ -574,9 +583,21 @@ function syncDhpToRekap() {
                         <ArrowRight className="w-3.5 h-3.5 mx-auto text-blue-600" />
                       </td>
                       <td className="py-2.5 px-3 font-semibold text-blue-700">
-                        Kolom E: PERLAKUAN &amp; Kolom F: JENIS TEMBAKAU
+                        Kolom F: JENIS TEMBAKAU
                       </td>
                       <td className="py-2.5 px-3 text-slate-500">Teks varian tembakau terstandarisasi</td>
+                    </tr>
+                    <tr className="bg-emerald-50/40">
+                      <td className="py-2.5 px-3 font-mono font-semibold text-emerald-800">
+                        (Rumus Otomatis Kolom E)
+                      </td>
+                      <td className="py-2.5 px-3 text-center text-emerald-600">
+                        <Check className="w-3.5 h-3.5 mx-auto" />
+                      </td>
+                      <td className="py-2.5 px-3 font-semibold text-emerald-800">
+                        Kolom E: =iferror(JOIN(" ";F...;G...))
+                      </td>
+                      <td className="py-2.5 px-3 text-emerald-700 font-medium">Rumus disalin otomatis dari baris atas (tidak tertimpa nilai statis)</td>
                     </tr>
                     <tr>
                       <td className="py-2.5 px-3 font-mono font-semibold text-slate-900">
