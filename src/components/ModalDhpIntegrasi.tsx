@@ -155,21 +155,37 @@ function syncDhpToRekap() {
     return;
   }
 
+  // Fungsi pencari baris riil terakhir (menghindari lompat karena rumus kosong di bawahnya)
+  function findActualLastRow_(sheet) {
+    const max = sheet.getLastRow();
+    if (max < 12) return 11;
+    const colB = sheet.getRange(12, 2, max - 11, 1).getValues();
+    for (let i = colB.length - 1; i >= 0; i--) {
+      const v = colB[i][0];
+      if (v instanceof Date || (typeof v === 'string' && v.trim() !== '')) {
+        return 12 + i;
+      }
+    }
+    return 11;
+  }
+
+  const lastRow = findActualLastRow_(shRekap);
+
   // 1. Baca data DHP
   const dhpData = shDhp.getDataRange().getValues();
   
   // 2. Baca data Rekap yang sudah ada untuk proteksi anti-duplikasi
-  const rekapData = shRekap.getDataRange().getValues();
   const existingKeys = new Set();
-  
-  // Mulai dari baris 4 (indeks 3) di sheet rekap
-  for (let r = 3; r < rekapData.length; r++) {
-    const row = rekapData[r];
-    const tgl = row[1] instanceof Date ? Utilities.formatDate(row[1], 'GMT+7', 'yyyy-MM-dd') : String(row[1]);
-    const tembakau = String(row[5] || '').trim().toLowerCase();
-    const baku = Number(row[7]) || 0;
-    if (tembakau && baku > 0) {
-      existingKeys.add(tgl + '|' + tembakau + '|' + baku.toFixed(1));
+  if (lastRow >= 12) {
+    const rekapValues = shRekap.getRange(12, 2, lastRow - 11, 8).getValues();
+    for (let r = 0; r < rekapValues.length; r++) {
+      const tgl = rekapValues[r][0];
+      const tembakau = String(rekapValues[r][4] || '').trim().toLowerCase();
+      const baku = Number(rekapValues[r][6]) || 0;
+      if (tgl && baku > 0) {
+        const iso = tgl instanceof Date ? Utilities.formatDate(tgl, 'GMT+7', 'yyyy-MM-dd') : String(tgl);
+        existingKeys.add(iso + '|' + tembakau + '|' + baku.toFixed(1));
+      }
     }
   }
 
@@ -196,7 +212,9 @@ function syncDhpToRekap() {
         const debu = Number(row[7]) || 0; // Kolom H
         const susut = Number(row[9]) || (rawBaku - hasil); // Kolom J
         const susutPct = rawBaku > 0 ? (susut / rawBaku) : 0;
+        const jalur = rawTembakau.toUpperCase().includes('SKM') ? 'SKM' : 'SKT';
         const nextRowNum = lastRow + 1 + rowsToAppend.length;
+
         // Susun baris presisi sesuai kolom B s/d N di REKAP SUSUT KROSOK
         rowsToAppend.push([
           '', // Kolom A: kosong/nomor
@@ -220,7 +238,6 @@ function syncDhpToRekap() {
   }
 
   if (rowsToAppend.length > 0) {
-    const lastRow = shRekap.getLastRow();
     shRekap.getRange(lastRow + 1, 1, rowsToAppend.length, rowsToAppend[0].length).setValues(rowsToAppend);
     
     // Proteksi Kolom E: Salin rumus asli =iferror(JOIN(...)) dari baris sebelumnya
@@ -232,7 +249,7 @@ function syncDhpToRekap() {
       );
     }
     
-    SpreadsheetApp.getActiveSpreadsheet().toast('Berhasil membukukan ' + rowsToAppend.length + ' baris dari DHP! Rumus Kolom E terjaga.', 'Sukses', 4);
+    SpreadsheetApp.getActiveSpreadsheet().toast('Berhasil membukukan ' + rowsToAppend.length + ' baris dari DHP langsung di bawah tanggal terbaru!', 'Sukses', 4);
   } else {
     SpreadsheetApp.getActiveSpreadsheet().toast('Semua data DHP sudah tercatat di Rekap (0 baris baru).', 'Info', 4);
   }
