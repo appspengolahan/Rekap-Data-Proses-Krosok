@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Download, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
-import { KrosokRecord } from '../types';
+import { Search, Download, ChevronLeft, ChevronRight, Filter, Database } from 'lucide-react';
+import { KrosokRecord, DhpKrosokItem } from '../types';
 import { formatNum, formatPct, getPctClass } from '../services/dataService';
 
 const HARI_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
@@ -37,14 +37,48 @@ function formatTanggalLengkap(isoDate: string, fallback?: string): string {
 
 interface DataLogViewProps {
   records: KrosokRecord[];
+  dhpItems?: DhpKrosokItem[];
 }
 
-export const DataLogView: React.FC<DataLogViewProps> = ({ records }) => {
+export const DataLogView: React.FC<DataLogViewProps> = ({ records, dhpItems = [] }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterProses, setFilterProses] = useState('Semua');
   const [filterTahun, setFilterTahun] = useState('Semua');
+  const [filterDhpStatus, setFilterDhpStatus] = useState<'Semua' | 'Identik' | 'RekapSaja'>('Semua');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+
+  // Fast lookup index for DHP matching
+  const dhpLookup = useMemo(() => {
+    const byRow = new Map<number, DhpKrosokItem>();
+    const byKey = new Map<string, DhpKrosokItem>();
+
+    dhpItems.forEach((d) => {
+      if (d.matchedRow) {
+        byRow.set(d.matchedRow, d);
+      }
+      const k1 = `${d.tanggal}|${(d.jenisKrosokMaster || d.jenisTembakau).toLowerCase()}|${d.baku.toFixed(1)}`;
+      byKey.set(k1, d);
+    });
+
+    return {
+      getMatch: (r: KrosokRecord): DhpKrosokItem | undefined => {
+        if (byRow.has(r.srcRow)) return byRow.get(r.srcRow);
+        const k = `${r.tanggal}|${r.jenisKrosok.toLowerCase()}|${r.baku.toFixed(1)}`;
+        if (byKey.has(k)) return byKey.get(k);
+
+        // Fallback loose match
+        return dhpItems.find((d) => {
+          const tglMatch = d.tanggal === r.tanggal;
+          const bakuMatch = Math.abs(d.baku - r.baku) < 0.2;
+          const jenisMatch =
+            d.jenisTembakau.toLowerCase().includes(r.jenisKrosok.toLowerCase()) ||
+            r.jenisKrosok.toLowerCase().includes(d.jenisTembakau.toLowerCase());
+          return tglMatch && bakuMatch && jenisMatch;
+        });
+      }
+    };
+  }, [dhpItems]);
 
   const availableYears = useMemo(() => {
     return Array.from(new Set(records.map((r) => r.tahun))).filter(Boolean).sort();
@@ -59,7 +93,14 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records }) => {
         (r.jenisPerlakuan && r.jenisPerlakuan.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchProses = filterProses === 'Semua' || r.jenisProses === filterProses;
       const matchTahun = filterTahun === 'Semua' || r.tahun === filterTahun;
-      return matchSearch && matchProses && matchTahun;
+
+      const isDhpIdentik = Boolean(dhpLookup.getMatch(r));
+      const matchDhp =
+        filterDhpStatus === 'Semua' ||
+        (filterDhpStatus === 'Identik' && isDhpIdentik) ||
+        (filterDhpStatus === 'RekapSaja' && !isDhpIdentik);
+
+      return matchSearch && matchProses && matchTahun && matchDhp;
     });
 
     // Urutkan periode terbaru berada paling atas, periode terlama di posisi paling bawah
@@ -69,7 +110,7 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records }) => {
       }
       return b.srcRow - a.srcRow;
     });
-  }, [records, searchTerm, filterProses, filterTahun]);
+  }, [records, searchTerm, filterProses, filterTahun, filterDhpStatus, dhpLookup]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRecords.length / pageSize));
   const currentPageRecords = useMemo(() => {
@@ -218,53 +259,67 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records }) => {
                   </td>
                 </tr>
               ) : (
-                currentPageRecords.map((r, idx) => (
-                  <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">
-                      {r.srcRow}
-                    </td>
-                    <td className="py-2.5 px-3.5 font-medium text-slate-800 whitespace-nowrap">
-                      {formatTanggalLengkap(r.tanggal, r.tanggalDisplay)}
-                    </td>
-                    <td className="py-2.5 px-4 font-semibold text-slate-900">
-                      <div>{r.jenisKrosok}</div>
-                      {r.jenisPerlakuan && r.jenisPerlakuan !== r.jenisKrosok && (
-                        <div className="text-[10px] text-slate-400 font-normal">
-                          {r.jenisPerlakuan}
+                currentPageRecords.map((r, idx) => {
+                  const dhpMatch = dhpLookup.getMatch(r);
+                  return (
+                    <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="py-2.5 px-3 text-center text-slate-400 font-mono text-[11px]">
+                        {r.srcRow}
+                      </td>
+                      <td className="py-2.5 px-3.5 font-medium text-slate-800 whitespace-nowrap">
+                        {formatTanggalLengkap(r.tanggal, r.tanggalDisplay)}
+                      </td>
+                      <td className="py-2.5 px-4 font-semibold text-slate-900">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span>{r.jenisKrosok}</span>
+                          {dhpMatch && (
+                            <span
+                              title={`Terverifikasi identik dengan DHP Krosok (Row ${dhpMatch.rowIdx} • Tab INTEGRASI DATA)`}
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-300 shadow-2xs group cursor-help transition-all hover:bg-emerald-100"
+                            >
+                              <Database className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
+                              <span>DHP Identik</span>
+                            </span>
+                          )}
                         </div>
-                      )}
-                    </td>
-                    <td className="py-2.5 px-2.5 text-center">
-                      <span
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                          r.jenisProses === 'SKT'
-                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                            : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                        }`}
-                      >
-                        {r.jenisProses}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-semibold text-slate-900">
-                      {formatNum(r.baku)}
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-semibold text-emerald-800">
-                      {formatNum(r.hasil)}
-                    </td>
-                    <td className="py-2.5 px-3 text-right text-slate-600">
-                      {formatNum(r.susutKg)}
-                    </td>
-                    <td className={`py-2.5 px-3 text-right font-bold ${getPctClass(r.susutPct)}`}>
-                      {formatPct(r.susutPct)}%
-                    </td>
-                    <td className="py-2.5 px-3 text-right text-slate-500">
-                      {formatPct(r.gagangPct)}%
-                    </td>
-                    <td className="py-2.5 px-4 text-right text-slate-500">
-                      {formatPct(r.debuAirPct)}%
-                    </td>
-                  </tr>
-                ))
+                        {r.jenisPerlakuan && r.jenisPerlakuan !== r.jenisKrosok && (
+                          <div className="text-[10px] text-slate-400 font-normal">
+                            {r.jenisPerlakuan}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-2.5 text-center">
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                            r.jenisProses === 'SKT'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                          }`}
+                        >
+                          {r.jenisProses}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-semibold text-slate-900">
+                        {formatNum(r.baku)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-semibold text-emerald-800">
+                        {formatNum(r.hasil)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right text-slate-600">
+                        {formatNum(r.susutKg)}
+                      </td>
+                      <td className={`py-2.5 px-3 text-right font-bold ${getPctClass(r.susutPct)}`}>
+                        {formatPct(r.susutPct)}%
+                      </td>
+                      <td className="py-2.5 px-3 text-right text-slate-500">
+                        {formatPct(r.gagangPct)}%
+                      </td>
+                      <td className="py-2.5 px-4 text-right text-slate-500">
+                        {formatPct(r.debuAirPct)}%
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

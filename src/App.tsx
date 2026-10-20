@@ -417,7 +417,7 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'data_log' && <DataLogView records={records} />}
+          {activeTab === 'data_log' && <DataLogView records={records} dhpItems={dhpItems} />}
 
           {activeTab === 'switch_app' && (
             <TabSwitchApp
