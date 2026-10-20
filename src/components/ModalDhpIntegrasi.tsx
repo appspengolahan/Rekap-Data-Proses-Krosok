@@ -236,116 +236,109 @@ function syncDhpToRekap() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-4xl overflow-hidden flex flex-col max-h-[92vh]">
-        {/* Header */}
-        <div className="px-6 py-4.5 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white">
-          <div className="flex items-center gap-3">
-            <span className="p-2.5 rounded-xl bg-blue-500/20 text-blue-300 border border-blue-400/30">
-              <Database className="w-5 h-5" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl overflow-hidden flex flex-col max-h-[94vh]">
+        {/* Header - Compact & Sleek */}
+        <div className="px-5 py-2.5 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-900 via-slate-850 to-indigo-950 text-white shrink-0">
+          <div className="flex items-center gap-2.5">
+            <span className="p-1.5 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-400/30">
+              <Database className="w-4 h-4" />
             </span>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-white tracking-tight">
+                <h3 className="text-sm font-bold text-white tracking-tight">
                   Integrasi & Sinkronisasi DHP Krosok
                 </h3>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
                   Presisi 100%
                 </span>
               </div>
-              <p className="text-xs text-slate-300 mt-0.5">
+              <p className="text-[11px] text-slate-300 leading-none mt-0.5">
                 Pencocokan dan transfer otomatis data aktif DHP Krosok ke Datasheet Rekap Susut Krosok
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Source & Target Connectors */}
-        <div className="px-6 py-3 bg-slate-50 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white rounded-lg border border-slate-200 text-slate-700 shadow-2xs">
+        {/* Source & Target Connectors - Compact Single-Line Strip */}
+        <div className="px-5 py-1.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
+          <div className="flex items-center gap-2 flex-wrap text-[11px]">
+            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-white rounded border border-slate-200 text-slate-700 shadow-2xs">
               <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
               <span className="font-semibold text-slate-500">Sumber DHP:</span>
-              <span className="font-mono text-[11px] text-blue-600 font-bold truncate max-w-[120px] sm:max-w-none">
-                {config.dhpSpreadsheetId}
-              </span>
-              <span className="text-[10px] px-1.5 py-0.2 bg-amber-50 text-amber-700 font-semibold rounded">
-                Tab: {config.dhpSheetName}
-              </span>
+              <span className="font-mono text-blue-700 font-bold">Tab {config.dhpSheetName}</span>
+              <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">({config.dhpSpreadsheetId.slice(0, 8)}...)</span>
             </div>
 
-            <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+            <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
 
-            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white rounded-lg border border-slate-200 text-slate-700 shadow-2xs">
+            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-white rounded border border-slate-200 text-slate-700 shadow-2xs">
               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
               <span className="font-semibold text-slate-500">Target Rekap:</span>
-              <span className="font-mono text-[11px] text-emerald-700 font-bold truncate max-w-[120px] sm:max-w-none">
-                {config.spreadsheetId}
-              </span>
-              <span className="text-[10px] px-1.5 py-0.2 bg-emerald-50 text-emerald-700 font-semibold rounded">
-                Tab: {config.sheetName}
-              </span>
+              <span className="font-mono text-emerald-700 font-bold">Tab {config.sheetName}</span>
+              <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">({config.spreadsheetId.slice(0, 8)}...)</span>
             </div>
           </div>
 
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 transition-colors shadow-2xs disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 transition-colors shadow-2xs disabled:opacity-50"
+            title="Muat ulang data DHP dari Google Spreadsheet"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-blue-600' : ''}`} />
-            <span>{refreshing ? 'Memeriksa DHP...' : 'Tarik Ulang DHP'}</span>
+            <span>{refreshing ? 'Memeriksa...' : 'Tarik Ulang DHP'}</span>
           </button>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex border-b border-slate-200 bg-white px-6">
+        {/* Tab Navigation - Slim */}
+        <div className="flex border-b border-slate-200 bg-white px-5 shrink-0">
           <button
             onClick={() => setActiveTab('preview')}
-            className={`flex items-center gap-2 py-3 px-3 text-xs font-semibold border-b-2 transition-colors ${
+            className={`flex items-center gap-1.5 py-2 px-3 text-xs font-semibold border-b-2 transition-colors ${
               activeTab === 'preview'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Layers className="w-4 h-4" />
-            <span>Pratinjau & Sinkronisasi ({dhpItems.length} Batch)</span>
+            <Layers className="w-3.5 h-3.5" />
+            <span>Pratinjau & Transaksi ({dhpItems.length} Batch)</span>
           </button>
           <button
             onClick={() => setActiveTab('mapping')}
-            className={`flex items-center gap-2 py-3 px-3 text-xs font-semibold border-b-2 transition-colors ${
+            className={`flex items-center gap-1.5 py-2 px-3 text-xs font-semibold border-b-2 transition-colors ${
               activeTab === 'mapping'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <ShieldCheck className="w-4 h-4" />
-            <span>Pemetaan Presisi Kolom</span>
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Pemetaan Kolom</span>
           </button>
           <button
             onClick={() => setActiveTab('script')}
-            className={`flex items-center gap-2 py-3 px-3 text-xs font-semibold border-b-2 transition-colors ${
+            className={`flex items-center gap-1.5 py-2 px-3 text-xs font-semibold border-b-2 transition-colors ${
               activeTab === 'script'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Code2 className="w-4 h-4" />
-            <span>Skrip Otomasi GAS (Google Sheet)</span>
+            <Code2 className="w-3.5 h-3.5" />
+            <span>Skrip Otomasi GAS</span>
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <div className="flex-1 overflow-y-auto p-4 space-y-3.5 flex flex-col min-h-0">
           {/* Success Notification */}
           {syncSuccessMsg && (
-            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2.5 animate-in fade-in">
+            <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2 animate-in fade-in shrink-0">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span className="font-semibold">{syncSuccessMsg}</span>
             </div>
@@ -353,87 +346,101 @@ function syncDhpToRekap() {
 
           {/* TAB 1: PREVIEW & SYNC */}
           {activeTab === 'preview' && (
-            <div className="space-y-4">
-              {/* Summary Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-200/80">
-                  <div className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                    Total Batch Aktif DHP
+            <div className="space-y-3 flex flex-col flex-1 min-h-0">
+              {/* Compact Metrics Strip */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 shrink-0">
+                <div className="bg-slate-50 rounded-lg px-3 py-2 border border-slate-200/90 flex items-center justify-between shadow-2xs">
+                  <div>
+                    <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                      Total Batch Aktif DHP
+                    </div>
+                    <div className="text-base font-bold text-slate-900 mt-0.5 flex items-baseline gap-1.5">
+                      <span>{dhpItems.length} Batch</span>
+                      <span className="text-[11px] font-medium text-slate-500">({formatNum(totalBaku)} Kg)</span>
+                    </div>
                   </div>
-                  <div className="text-xl font-bold text-slate-900 mt-1">
-                    {dhpItems.length} Batch
-                  </div>
-                  <div className="text-xs text-slate-500 mt-0.5 font-medium">
-                    Total Baku: {formatNum(totalBaku)} Kg
-                  </div>
+                  <Layers className="w-4 h-4 text-slate-400" />
                 </div>
 
-                <div className="bg-emerald-50/70 rounded-xl p-3.5 border border-emerald-200/80">
-                  <div className="text-[11px] font-semibold text-emerald-700 uppercase tracking-wider flex items-center justify-between">
-                    <span>Terverifikasi di Rekap</span>
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <div className="bg-emerald-50/70 rounded-lg px-3 py-2 border border-emerald-200/90 flex items-center justify-between shadow-2xs">
+                  <div>
+                    <div className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wider">
+                      Terverifikasi di Rekap
+                    </div>
+                    <div className="text-base font-bold text-emerald-800 mt-0.5 flex items-baseline gap-1.5">
+                      <span>{matchedCount} Batch</span>
+                      <span className="text-[11px] font-semibold text-emerald-600">
+                        ({dhpItems.length ? Math.round((matchedCount / dhpItems.length) * 100) : 0}%)
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-xl font-bold text-emerald-700 mt-1">
-                    {matchedCount} Batch ({dhpItems.length ? Math.round((matchedCount / dhpItems.length) * 100) : 0}%)
-                  </div>
-                  <div className="text-xs text-emerald-600 mt-0.5 font-medium">
-                    Data identik sudah ada di Sheet Rekap
-                  </div>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                 </div>
 
-                <div className="bg-blue-50/70 rounded-xl p-3.5 border border-blue-200/80">
-                  <div className="text-[11px] font-semibold text-blue-700 uppercase tracking-wider flex items-center justify-between">
-                    <span>Batch Baru Siap Masuk</span>
-                    <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                <div className={`rounded-lg px-3 py-2 border flex items-center justify-between shadow-2xs ${
+                  newCount > 0 ? 'bg-blue-50/90 border-blue-200' : 'bg-slate-50 rounded-lg border-slate-200/90'
+                }`}>
+                  <div>
+                    <div className={`text-[10px] font-semibold uppercase tracking-wider ${newCount > 0 ? 'text-blue-700' : 'text-slate-500'}`}>
+                      Batch Baru Siap Masuk
+                    </div>
+                    <div className={`text-base font-bold mt-0.5 flex items-baseline gap-1.5 ${newCount > 0 ? 'text-blue-700' : 'text-slate-700'}`}>
+                      <span>{newCount} Batch</span>
+                      <span className="text-[11px] font-normal text-slate-500">
+                        {newCount === 0 ? 'Semua tersinkron' : 'Perlu dibukukan'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-xl font-bold text-blue-700 mt-1">
-                    {newCount} Batch
-                  </div>
-                  <div className="text-xs text-blue-600 mt-0.5 font-medium">
-                    {newCount === 0 ? 'Semua data telah tersinkron' : 'Siap dibukukan ke baris baru'}
-                  </div>
+                  {newCount > 0 ? (
+                    <Sparkles className="w-4 h-4 text-blue-600 animate-pulse" />
+                  ) : (
+                    <ShieldCheck className="w-4 h-4 text-slate-400" />
+                  )}
                 </div>
               </div>
 
-              {/* Table of DHP Items */}
-              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
-                <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-700">
-                    Daftar Transaksi DHP Terdeteksi (Tab INTEGRASI DATA)
-                  </span>
-                  <span className="text-[11px] text-slate-500">
+              {/* Table of DHP Items - The Main Hero Component */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs flex-1 flex flex-col min-h-[300px] bg-white">
+                <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
+                  <div className="flex items-center gap-2">
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600" />
+                    <span className="text-xs font-bold text-slate-800">
+                      Daftar Transaksi DHP Terdeteksi (Tab {config.dhpSheetName})
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-slate-500 font-medium">
                     Menampilkan {dhpItems.length} baris proses aktif
                   </span>
                 </div>
 
-                <div className="overflow-x-auto">
+                <div className="overflow-auto flex-1 max-h-[460px]">
                   <table className="w-full text-xs text-left">
-                    <thead>
-                      <tr className="bg-slate-100/70 text-slate-600 font-semibold border-b border-slate-200 uppercase text-[10px] tracking-wider">
-                        <th className="py-2.5 px-3 text-center">Row DHP</th>
-                        <th className="py-2.5 px-3">Tanggal & Waktu</th>
-                        <th className="py-2.5 px-3">Jenis Tembakau</th>
-                        <th className="py-2.5 px-2.5 text-center">Jalur</th>
-                        <th className="py-2.5 px-3 text-right">Netto Baku (Kg)</th>
-                        <th className="py-2.5 px-3 text-right">Hasil (Kg)</th>
-                        <th className="py-2.5 px-3 text-right">Susut (%)</th>
-                        <th className="py-2.5 px-3.5 text-center">Status Integrasi Rekap</th>
+                    <thead className="sticky top-0 bg-slate-100 z-10 text-slate-700 font-semibold border-b border-slate-200 uppercase text-[10px] tracking-wider shadow-2xs">
+                      <tr>
+                        <th className="py-2 px-3 text-center w-14">Row</th>
+                        <th className="py-2 px-3">Tanggal & Waktu</th>
+                        <th className="py-2 px-3">Jenis Tembakau</th>
+                        <th className="py-2 px-2 text-center w-14">Jalur</th>
+                        <th className="py-2 px-3 text-right">Netto Baku (Kg)</th>
+                        <th className="py-2 px-3 text-right">Hasil (Kg)</th>
+                        <th className="py-2 px-3 text-right">Susut (%)</th>
+                        <th className="py-2 px-3.5 text-center">Status Integrasi Rekap</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
                       {dhpItems.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="py-8 text-center text-slate-400">
+                          <td colSpan={8} className="py-10 text-center text-slate-400">
                             Tidak ditemukan baris transaksi aktif pada Sheet DHP Krosok.
                           </td>
                         </tr>
                       ) : (
                         dhpItems.map((item) => (
-                          <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                            <td className="py-2.5 px-3 text-center font-mono text-[11px] text-slate-400">
+                          <tr key={item.id} className="hover:bg-blue-50/40 transition-colors">
+                            <td className="py-2 px-3 text-center font-mono text-[11px] text-slate-400">
                               {item.rowIdx}
                             </td>
-                            <td className="py-2.5 px-3 font-medium text-slate-800 whitespace-nowrap">
+                            <td className="py-2 px-3 font-medium text-slate-800 whitespace-nowrap">
                               <div>{item.tanggalDisplay}</div>
                               {item.waktu && (
                                 <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
@@ -442,7 +449,7 @@ function syncDhpToRekap() {
                                 </div>
                               )}
                             </td>
-                            <td className="py-2.5 px-3 font-semibold text-slate-900">
+                            <td className="py-2 px-3 font-semibold text-slate-900">
                               <div>{item.jenisTembakau}</div>
                               {item.kodeStock && (
                                 <div className="text-[10px] text-slate-400 font-normal">
@@ -450,7 +457,7 @@ function syncDhpToRekap() {
                                 </div>
                               )}
                             </td>
-                            <td className="py-2.5 px-2.5 text-center">
+                            <td className="py-2 px-2 text-center">
                               <span
                                 className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
                                   item.jalurProses === 'SKT'
@@ -461,16 +468,16 @@ function syncDhpToRekap() {
                                 {item.jalurProses}
                               </span>
                             </td>
-                            <td className="py-2.5 px-3 text-right font-bold text-slate-900">
+                            <td className="py-2 px-3 text-right font-bold text-slate-900">
                               {formatNum(item.baku)}
                             </td>
-                            <td className="py-2.5 px-3 text-right font-medium text-slate-700">
+                            <td className="py-2 px-3 text-right font-medium text-slate-700">
                               {formatNum(item.hasil)}
                             </td>
-                            <td className="py-2.5 px-3 text-right font-semibold text-slate-800">
+                            <td className="py-2 px-3 text-right font-semibold text-slate-800">
                               {formatPct(item.susutPct)}%
                             </td>
-                            <td className="py-2.5 px-3.5 text-center whitespace-nowrap">
+                            <td className="py-2 px-3.5 text-center whitespace-nowrap">
                               {item.isMatchedInRekap ? (
                                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                                   <Check className="w-3 h-3 text-emerald-600" />
@@ -491,28 +498,25 @@ function syncDhpToRekap() {
                 </div>
               </div>
 
-              {/* Sync Action Area */}
-              <div className="p-4 bg-gradient-to-r from-blue-50/50 to-indigo-50/50 rounded-xl border border-blue-200/80 flex items-center justify-between gap-4 flex-wrap">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <ShieldCheck className="w-4 h-4 text-blue-600" />
-                    <span>Sinkronisasi Presisi ke Sheet Rekap Susut Krosok</span>
-                  </h4>
-                  <p className="text-[11px] text-slate-600 mt-0.5">
-                    Data akan dibukukan secara presisi pada baris baru tanpa menimpa data historis, dilengkapi proteksi anti-duplikasi.
-                  </p>
+              {/* Compact Bottom Action Bar */}
+              <div className="px-3.5 py-2 bg-gradient-to-r from-blue-50/70 to-indigo-50/70 rounded-lg border border-blue-200/80 flex items-center justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-2 text-xs">
+                  <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span className="text-slate-700 font-medium text-[11px]">
+                    {newCount > 0
+                      ? `Terdapat ${newCount} batch baru yang siap dibukukan ke baris baru Sheet Rekap.`
+                      : `Semua ${dhpItems.length} baris data DHP sudah tersinkronisasi presisi di Sheet Rekap.`}
+                  </span>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleSyncToRekap}
-                    disabled={syncingToRekap}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors disabled:opacity-50"
-                  >
-                    <Send className={`w-3.5 h-3.5 ${syncingToRekap ? 'animate-spin' : ''}`} />
-                    <span>{syncingToRekap ? 'Sedang Membukukan...' : 'Sinkronkan ke Sheet Rekap'}</span>
-                  </button>
-                </div>
+                <button
+                  onClick={handleSyncToRekap}
+                  disabled={syncingToRekap}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs transition-colors disabled:opacity-50 shrink-0"
+                >
+                  <Send className={`w-3.5 h-3.5 ${syncingToRekap ? 'animate-spin' : ''}`} />
+                  <span>{syncingToRekap ? 'Sedang Membukukan...' : 'Sinkronkan ke Sheet Rekap'}</span>
+                </button>
               </div>
             </div>
           )}
