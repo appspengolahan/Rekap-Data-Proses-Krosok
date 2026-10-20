@@ -617,14 +617,15 @@ function perbaikiHasilNolDiRekap() {
                         <th className="py-2 px-2 text-center w-14">Jalur</th>
                         <th className="py-2 px-3 text-right">Netto Baku (Kg)</th>
                         <th className="py-2 px-3 text-right">Hasil (Kg)</th>
-                        <th className="py-2 px-3 text-right">Susut (%)</th>
+                        <th className="py-2 px-3 text-right text-rose-700">Susut (Kg)</th>
+                        <th className="py-2 px-3 text-right text-rose-700">Susut (%)</th>
                         <th className="py-2 px-3.5 text-center">Status Integrasi Rekap</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
                       {dhpItems.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="py-10 text-center text-slate-400">
+                          <td colSpan={9} className="py-10 text-center text-slate-400">
                             Tidak ditemukan baris transaksi aktif pada Sheet DHP Krosok.
                           </td>
                         </tr>
@@ -673,6 +674,9 @@ function perbaikiHasilNolDiRekap() {
                                   0,0 (Proses)
                                 </span>
                               )}
+                            </td>
+                            <td className="py-2 px-3 text-right font-medium text-rose-700">
+                              {formatNum(item.susutKg)}
                             </td>
                             <td className="py-2 px-3 text-right font-semibold text-slate-800">
                               {formatPct(item.susutPct)}%
