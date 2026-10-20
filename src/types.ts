@@ -101,6 +101,7 @@ export interface DhpKrosokItem {
   baku: number;
   hasil: number;
   gagangKg: number;
+  airKg?: number;
   debuKg: number;
   susutKg: number;
   susutPct: number;

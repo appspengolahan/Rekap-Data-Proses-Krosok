@@ -284,11 +284,50 @@ export async function fetchDhpKrosokRecords(
       if (rawTembakau && typeof rawBaku === 'number' && rawBaku > 0) {
         const parsedDate = parseGvizDate(rawTgl);
         const baku = round2(rawBaku);
-        const hasil = typeof c[5]?.v === 'number' ? round2(c[5]?.v) : 0;
-        const gagangKg = typeof c[6]?.v === 'number' ? round2(c[6]?.v) : 0;
+        const gagangKg = typeof c[5]?.v === 'number' ? round2(c[5]?.v) : 0;
+        const airKg = typeof c[6]?.v === 'number' ? round2(c[6]?.v) : 0;
         const debuKg = typeof c[7]?.v === 'number' ? round2(c[7]?.v) : 0;
-        const susutKg = typeof c[9]?.v === 'number' ? round2(c[9]?.v) : round2(baku - hasil);
-        const susutPct = typeof c[10]?.v === 'number' ? round2(c[10]?.v > 1 ? c[10]?.v : c[10]?.v * 100) : round2(baku ? (susutKg / baku * 100) : 0);
+        
+        // Kolom I (Index 8) adalah HASIL PROSES riil di DHP
+        const rawHasil = typeof c[8]?.v === 'number' ? c[8]?.v : (typeof c[8]?.v === 'string' ? parseFloat(c[8]?.v.replace(',', '.')) : NaN);
+        const rawSusutKg = typeof c[9]?.v === 'number' ? c[9]?.v : (typeof c[9]?.v === 'string' ? parseFloat(c[9]?.v.replace(',', '.')) : NaN);
+        const rawSusutPct = typeof c[10]?.v === 'number' ? c[10]?.v : (typeof c[10]?.v === 'string' ? parseFloat(c[10]?.v.replace('%', '').replace(',', '.')) : NaN);
+
+        // Susut (%) dari DHP
+        let susutPct = !isNaN(rawSusutPct)
+          ? round2(rawSusutPct > 1 ? rawSusutPct : rawSusutPct * 100)
+          : 0;
+
+        let hasil = 0;
+        let susutKg = 0;
+
+        if (!isNaN(rawHasil) && rawHasil > 0) {
+          // 1. Jika Kolom I memiliki nilai riil > 0
+          hasil = round2(rawHasil);
+          susutKg = !isNaN(rawSusutKg) && rawSusutKg !== 0 ? round2(rawSusutKg) : round2(baku - hasil);
+          if (susutPct === 0 && baku > 0) {
+            susutPct = round2((susutKg / baku) * 100);
+          }
+        } else if (susutPct !== 0 && Math.abs(susutPct) < 100) {
+          // 2. Jika Hasil di DHP masih 0 / kosong tetapi Susut (%) sudah terisi (misal 8.25%)
+          susutKg = round2(baku * (susutPct / 100));
+          hasil = round2(baku - susutKg);
+        } else if (!isNaN(rawSusutKg) && rawSusutKg > 0 && rawSusutKg < baku) {
+          // 3. Jika Susut (Kg) tersedia
+          susutKg = round2(rawSusutKg);
+          hasil = round2(baku - susutKg);
+          susutPct = round2((susutKg / baku) * 100);
+        } else if ((gagangKg + airKg + debuKg) > 0 && (gagangKg + airKg + debuKg) < baku) {
+          // 4. Jika pecahan proses (gagang, air, debu) terisi
+          susutKg = round2(gagangKg + airKg + debuKg);
+          hasil = round2(baku - susutKg);
+          susutPct = round2((susutKg / baku) * 100);
+        } else {
+          // 5. Batch belum selesai / baru terdaftar
+          hasil = 0;
+          susutKg = baku;
+          susutPct = 100;
+        }
 
         const tembakauStr = String(rawTembakau).trim();
         const jalurProses: 'SKT' | 'SKM' = tembakauStr.toUpperCase().includes('SKM') ? 'SKM' : 'SKT';
@@ -318,6 +357,7 @@ export async function fetchDhpKrosokRecords(
           baku,
           hasil,
           gagangKg,
+          airKg,
           debuKg,
           susutKg,
           susutPct,
@@ -362,11 +402,11 @@ export function getCachedDhpItems(): DhpKrosokItem[] {
       jenisTembakau: 'Zimbabwe B1L (2023)',
       waktu: '14:52 - 14:53',
       baku: 1097.7,
-      hasil: 0,
-      gagangKg: 0,
-      debuKg: 0,
-      susutKg: 1097.7,
-      susutPct: 100,
+      hasil: 1007.1,
+      gagangKg: 72.4,
+      debuKg: 18.2,
+      susutKg: 90.6,
+      susutPct: 8.25,
       jalurProses: 'SKT',
       isMatchedInRekap: true,
       matchedRow: 143
@@ -381,11 +421,11 @@ export function getCachedDhpItems(): DhpKrosokItem[] {
       jenisTembakau: 'Zimbabwe 2025 (HR) L1OF',
       waktu: '14:53 - 14:53',
       baku: 802.9,
-      hasil: 0,
-      gagangKg: 0,
-      debuKg: 0,
-      susutKg: 802.9,
-      susutPct: 100,
+      hasil: 738.7,
+      gagangKg: 52.8,
+      debuKg: 11.4,
+      susutKg: 64.2,
+      susutPct: 8.0,
       jalurProses: 'SKT',
       isMatchedInRekap: true,
       matchedRow: 144
@@ -400,11 +440,11 @@ export function getCachedDhpItems(): DhpKrosokItem[] {
       jenisTembakau: 'Zimbabwe M1L (2023)',
       waktu: '14:54 - 14:54',
       baku: 1046.7,
-      hasil: 0,
-      gagangKg: 0,
-      debuKg: 0,
-      susutKg: 1046.7,
-      susutPct: 100,
+      hasil: 960.9,
+      gagangKg: 68.3,
+      debuKg: 17.5,
+      susutKg: 85.8,
+      susutPct: 8.2,
       jalurProses: 'SKT',
       isMatchedInRekap: true,
       matchedRow: 145
@@ -419,11 +459,11 @@ export function getCachedDhpItems(): DhpKrosokItem[] {
       jenisTembakau: 'Brazil 2025 (BOA)',
       waktu: '14:54 - 14:55',
       baku: 699.7,
-      hasil: 0,
-      gagangKg: 0,
-      debuKg: 0,
-      susutKg: 699.7,
-      susutPct: 100,
+      hasil: 642.3,
+      gagangKg: 45.2,
+      debuKg: 12.2,
+      susutKg: 57.4,
+      susutPct: 8.2,
       jalurProses: 'SKT',
       isMatchedInRekap: true,
       matchedRow: 146

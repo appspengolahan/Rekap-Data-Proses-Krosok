@@ -134,8 +134,14 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('⚡ Integrasi DHP Krosok')
-    .addItem('Sinkronkan DHP ke Rekap Susut', 'syncDhpToRekap')
+    .addItem('1. Sinkronkan DHP ke Rekap Susut', 'sinkronkanDhpKeRekap')
+    .addItem('2. Perbaiki Baris Hasil 0 di Rekap', 'perbaikiHasilNolDiRekap')
     .addToUi();
+}
+
+/** Fungsi utama pemicu otomatis (Trigger) & tombol manual */
+function sinkronkanDhpKeRekap() {
+  syncDhpToRekap();
 }
 
 function syncDhpToRekap() {
@@ -194,9 +200,10 @@ function syncDhpToRekap() {
 
   for (let i = 0; i < dhpData.length; i++) {
     const row = dhpData[i];
-    const rawTgl = row[2]; // Kolom C
-    const rawTembakau = String(row[3] || '').trim(); // Kolom D
-    const rawBaku = Number(row[4]) || 0; // Kolom E
+    const rawTgl = row[2]; // Kolom C: Tanggal Proses
+    const rawTembakau = String(row[3] || '').trim(); // Kolom D: Jenis Tembakau
+    const rawBaku = Number(row[4]) || 0; // Kolom E: Baku
+    const waktu = String(row[12] || '').trim(); // Kolom M: Waktu
     
     if (rawTembakau && rawBaku > 0) {
       const dateObj = rawTgl instanceof Date ? rawTgl : new Date();
@@ -205,32 +212,66 @@ function syncDhpToRekap() {
 
       // Cek apakah sudah pernah dibukukan
       if (!existingKeys.has(uniqueKey)) {
-        const bulanName = MONTH_NAMES[dateObj.getMonth()];
-        const tahunStr = String(dateObj.getFullYear());
-        const hasil = Number(row[5]) || 0; // Kolom F
-        const gagang = Number(row[6]) || 0; // Kolom G
-        const debu = Number(row[7]) || 0; // Kolom H
-        const susut = Number(row[9]) || (rawBaku - hasil); // Kolom J
-        const susutPct = rawBaku > 0 ? (susut / rawBaku) : 0;
+        const gagang = Number(row[5]) || 0; // Kolom F: GAGANG
+        const air = Number(row[6]) || 0;    // Kolom G: K. AIR
+        const debu = Number(row[7]) || 0;   // Kolom H: DEBU
+
+        var rawHasilVal = Number(row[8]) || 0; // Kolom I: HASIL PROSES
+        var rawSusutKgVal = Number(row[9]) || 0; // Kolom J: SUSUT (Kg)
+        var rawSusutPctVal = typeof row[10] === 'number' ? row[10] : 0; // Kolom K: SUSUT (%)
+        if (rawSusutPctVal > 1) rawSusutPctVal = rawSusutPctVal / 100;
+
+        var hasil = rawHasilVal;
+        var susut = rawSusutKgVal;
+        var susutPct = rawSusutPctVal;
+
+        // KALKULASI PINTAR HASIL: Jika di DHP kolom Hasil masih 0 tetapi Susut sudah ada
+        if (hasil <= 0) {
+          if (susutPct > 0 && susutPct < 1) {
+            susut = Math.round(rawBaku * susutPct * 10) / 10;
+            hasil = Math.round((rawBaku - susut) * 10) / 10;
+          } else if (susut > 0 && susut < rawBaku) {
+            hasil = Math.round((rawBaku - susut) * 10) / 10;
+            susutPct = rawBaku > 0 ? (susut / rawBaku) : 0;
+          } else if ((gagang + air + debu) > 0 && (gagang + air + debu) < rawBaku) {
+            susut = Math.round((gagang + air + debu) * 10) / 10;
+            hasil = Math.round((rawBaku - susut) * 10) / 10;
+            susutPct = rawBaku > 0 ? (susut / rawBaku) : 0;
+          }
+        } else {
+          if (susut <= 0) {
+            susut = Math.round((rawBaku - hasil) * 10) / 10;
+          }
+          if (susutPct <= 0 && rawBaku > 0) {
+            susutPct = susut / rawBaku;
+          }
+        }
+
+        // PENGAMAN: Jika batch belum selesai (Hasil masih 0 dan waktu masih '-' atau belum diproses),
+        // jangan dibukukan ke Rekap dulu, tunggu sampai hasil proses masuk!
+        if (hasil <= 0) {
+          continue;
+        }
+
         const jalur = rawTembakau.toUpperCase().includes('SKM') ? 'SKM' : 'SKT';
-        const nextRowNum = lastRow + 1 + rowsToAppend.length;
 
         // Susun baris presisi sesuai kolom B s/d N di REKAP SUSUT KROSOK
+        // PENTING: Kolom C, D, E, J, K dibiarkan string kosong ('') karena akan disalin rumusnya
         rowsToAppend.push([
-          '', // Kolom A: kosong/nomor
-          dateObj, // Kolom B: Tanggal
-          '', // Kolom C: Rumus Bulan (Disalin dari baris atas)
-          '', // Kolom D: Rumus Tahun (Disalin dari baris atas)
-          '', // Kolom E: Rumus JOIN (Disalin dari baris atas)
-          rawTembakau, // Kolom F: Jenis Tembakau
-          jalur, // Kolom G: Jalur (SKT/SKM)
-          rawBaku, // Kolom H: Netto Baku (Kg)
-          hasil, // Kolom I: Netto Hasil (Kg)
-          susut, // Kolom J: Susut (Kg)
-          susutPct, // Kolom K: Susut (%)
-          gagang, // Kolom L: Gagang
-          0, // Kolom M: Air
-          debu // Kolom N: Debu
+          '', // Kolom A: kosong (Kolom 1)
+          dateObj, // Kolom B: Tanggal (Kolom 2)
+          '', // Kolom C: Rumus Bulan -> Disalin formula dari baris atas
+          '', // Kolom D: Rumus Tahun -> Disalin formula dari baris atas
+          '', // Kolom E: Rumus JOIN -> Disalin formula dari baris atas
+          rawTembakau, // Kolom F: Jenis Tembakau (Kolom 6)
+          jalur, // Kolom G: Jalur (SKT/SKM) (Kolom 7)
+          rawBaku, // Kolom H: Netto Baku (Kg) (Kolom 8)
+          hasil, // Kolom I: Netto Hasil (Kg) (Kolom 9) -> Input Numerik Riil
+          '', // Kolom J: Susut (Kg) -> RUMUS (Disalin formula dari baris atas)
+          '', // Kolom K: Susut (%) -> RUMUS (Disalin formula dari baris atas)
+          gagang, // Kolom L: Gagang (Kolom 12)
+          air, // Kolom M: Air (Kolom 13)
+          debu // Kolom N: Debu (Kolom 14)
         ]);
         existingKeys.add(uniqueKey);
       }
@@ -240,18 +281,145 @@ function syncDhpToRekap() {
   if (rowsToAppend.length > 0) {
     shRekap.getRange(lastRow + 1, 1, rowsToAppend.length, rowsToAppend[0].length).setValues(rowsToAppend);
     
-    // Proteksi Rumus Kolom C, D, dan E (3 kolom): Salin rumus asli dari baris sebelumnya
-    if (lastRow >= 12) {
+    // 1. Salin Rumus Kolom C, D, E (Bulan, Tahun, Join) dari baris sebelumnya
+    if (lastRow >= 11) {
       shRekap.getRange(lastRow, 3, 1, 3).copyTo(
         shRekap.getRange(lastRow + 1, 3, rowsToAppend.length, 3),
         SpreadsheetApp.CopyPasteType.PASTE_FORMULA,
         false
       );
+
+      // 2. Salin Rumus Kolom J dan K (Susut Kg dan Susut %) dari baris sebelumnya
+      // Menjaga rumus otomatis kolom J dan K tetap hidup dan tidak tertimpa teks statis
+      shRekap.getRange(lastRow, 10, 1, 2).copyTo(
+        shRekap.getRange(lastRow + 1, 10, rowsToAppend.length, 2),
+        SpreadsheetApp.CopyPasteType.PASTE_FORMULA,
+        false
+      );
     }
     
-    SpreadsheetApp.getActiveSpreadsheet().toast('Berhasil membukukan ' + rowsToAppend.length + ' baris dari DHP! Rumus Kolom C, D, E terjaga.', 'Sukses', 4);
+    var infoMsg = 'Berhasil membukukan ' + rowsToAppend.length + ' baris dari DHP! Rumus C, D, E, J, K terjaga utuh.';
+    Logger.log(infoMsg);
+    try { ssRekap.toast(infoMsg, 'Sukses', 4); } catch (e) {}
   } else {
-    SpreadsheetApp.getActiveSpreadsheet().toast('Semua data DHP sudah tercatat di Rekap (0 baris baru).', 'Info', 4);
+    var emptyMsg = 'Semua data DHP sudah tercatat di Rekap (0 baris baru).';
+    Logger.log(emptyMsg);
+    try { ssRekap.toast(emptyMsg, 'Info', 4); } catch (e) {}
+  }
+}
+
+/**
+ * FUNGSI PERBAIKAN: Memperbaiki baris di Sheet Rekap yang sebelumnya terlanjur masuk dengan Netto Hasil = 0
+ * PENTING: Hanya mengisi Kolom I (Netto Hasil) dan memulihkan rumus di Kolom C, D, E, J, K
+ */
+function perbaikiHasilNolDiRekap() {
+  const SPREADSHEET_DHP_ID = '${config.dhpSpreadsheetId}';
+  const SPREADSHEET_REKAP_ID = '${config.spreadsheetId}';
+  const SHEET_DHP_NAME = '${config.dhpSheetName}';
+  const SHEET_REKAP_NAME = '${config.sheetName}';
+
+  const ssRekap = SpreadsheetApp.openById(SPREADSHEET_REKAP_ID);
+  const shRekap = ssRekap.getSheetByName(SHEET_REKAP_NAME);
+  const ssDhp = SpreadsheetApp.openById(SPREADSHEET_DHP_ID);
+  const shDhp = ssDhp.getSheetByName(SHEET_DHP_NAME);
+
+  if (!shRekap) return;
+
+  const lastRow = shRekap.getLastRow();
+  if (lastRow < 12) return;
+
+  // Baca peta susut dari DHP sebagai referensi pemulihan
+  const dhpMap = {};
+  if (shDhp) {
+    const dhpVals = shDhp.getDataRange().getValues();
+    for (let i = 0; i < dhpVals.length; i++) {
+      const row = dhpVals[i];
+      const tgl = row[2];
+      const tembakau = String(row[3] || '').trim().toLowerCase();
+      const baku = Number(row[4]) || 0;
+      if (tgl && baku > 0) {
+        const iso = tgl instanceof Date ? Utilities.formatDate(tgl, 'GMT+7', 'yyyy-MM-dd') : String(tgl);
+        const k = iso + '|' + tembakau + '|' + baku.toFixed(1);
+        const pct = typeof row[10] === 'number' ? (row[10] > 1 ? row[10]/100 : row[10]) : 0;
+        const h = Number(row[8]) || 0;
+        const s = Number(row[9]) || 0;
+        dhpMap[k] = { pct: pct, hasil: h, susut: s };
+      }
+    }
+  }
+
+  // Baca data baris untuk mengecek Netto Hasil = 0
+  const rowsCount = lastRow - 11;
+  const colB = shRekap.getRange(12, 2, rowsCount, 1).getValues(); // Tanggal
+  const colF = shRekap.getRange(12, 6, rowsCount, 1).getValues(); // Jenis Tembakau
+  const colH = shRekap.getRange(12, 8, rowsCount, 1).getValues(); // Netto Baku
+  const colI = shRekap.getRange(12, 9, rowsCount, 1).getValues(); // Netto Hasil
+  const colJ = shRekap.getRange(12, 10, rowsCount, 1).getValues(); // Susut Kg (referensi)
+
+  let fixCount = 0;
+
+  for (let r = 0; r < rowsCount; r++) {
+    const rowNum = 12 + r;
+    const tgl = colB[r][0];
+    const tembakau = String(colF[r][0] || '').trim().toLowerCase();
+    const baku = Number(colH[r][0]) || 0;
+    const hasil = Number(colI[r][0]) || 0;
+
+    // Jika baris memiliki Baku > 0 tetapi Hasil masih bernilai 0
+    if (baku > 0 && hasil <= 0) {
+      const iso = tgl instanceof Date ? Utilities.formatDate(tgl, 'GMT+7', 'yyyy-MM-dd') : String(tgl);
+      const k = iso + '|' + tembakau + '|' + baku.toFixed(1);
+      const dhpRef = dhpMap[k];
+
+      let calculatedHasil = 0;
+
+      if (dhpRef && dhpRef.hasil > 0) {
+        calculatedHasil = dhpRef.hasil;
+      } else if (dhpRef && dhpRef.pct > 0 && dhpRef.pct < 1) {
+        const sKg = Math.round(baku * dhpRef.pct * 10) / 10;
+        calculatedHasil = Math.round((baku - sKg) * 10) / 10;
+      } else if (dhpRef && dhpRef.susut > 0 && dhpRef.susut < baku) {
+        calculatedHasil = Math.round((baku - dhpRef.susut) * 10) / 10;
+      } else {
+        const exSusut = Number(colJ[r][0]) || 0;
+        if (exSusut > 0 && exSusut < baku) {
+          calculatedHasil = Math.round((baku - exSusut) * 10) / 10;
+        }
+      }
+
+      if (calculatedHasil > 0) {
+        // HANYA ISI KOLOM I (Netto Hasil) - TIDAK MENYENTUH C, D, E, J, K!
+        shRekap.getRange(rowNum, 9).setValue(calculatedHasil);
+
+        // Pulihkan formula Kolom C, D, E jika kosong
+        shRekap.getRange(11, 3, 1, 3).copyTo(
+          shRekap.getRange(rowNum, 3, 1, 3),
+          SpreadsheetApp.CopyPasteType.PASTE_FORMULA,
+          false
+        );
+
+        // Pulihkan formula Kolom J dan K (Susut Kg & Susut %) dari baris 11
+        // Sehingga Susut dan Susut % otomatis dihitung oleh formula spreadsheet!
+        shRekap.getRange(11, 10, 1, 2).copyTo(
+          shRekap.getRange(rowNum, 10, 1, 2),
+          SpreadsheetApp.CopyPasteType.PASTE_FORMULA,
+          false
+        );
+
+        fixCount++;
+      }
+    }
+  }
+
+  const resMsg = (fixCount > 0)
+    ? 'Berhasil mengisi Netto Hasil pada ' + fixCount + ' baris! Rumus Kolom C, D, E, J, K terjaga & aktif.'
+    : 'Semua baris di Sheet Rekap sudah terisi Netto Hasil dengan benar.';
+  
+  Logger.log(resMsg);
+  try {
+    ssRekap.toast(resMsg, 'Sukses', 5);
+  } catch (e) {
+    Logger.log('Toast: ' + e.message);
   }
 }`;
 
@@ -498,7 +666,13 @@ function syncDhpToRekap() {
                               {formatNum(item.baku)}
                             </td>
                             <td className="py-2 px-3 text-right font-medium text-slate-700">
-                              {formatNum(item.hasil)}
+                              {item.hasil > 0 ? (
+                                <span className="font-semibold text-emerald-800">{formatNum(item.hasil)}</span>
+                              ) : (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200" title="Proses belum selesai atau menunggu data hasil">
+                                  0,0 (Proses)
+                                </span>
+                              )}
                             </td>
                             <td className="py-2 px-3 text-right font-semibold text-slate-800">
                               {formatPct(item.susutPct)}%
@@ -642,7 +816,7 @@ function syncDhpToRekap() {
                     </tr>
                     <tr>
                       <td className="py-2.5 px-3 font-mono font-semibold text-slate-900">
-                        Kolom F: Netto Hasil (Kg)
+                        Kolom I: HASIL PROSES (Kg)
                       </td>
                       <td className="py-2.5 px-3 text-center text-slate-400">
                         <ArrowRight className="w-3.5 h-3.5 mx-auto text-blue-600" />
@@ -650,7 +824,7 @@ function syncDhpToRekap() {
                       <td className="py-2.5 px-3 font-semibold text-emerald-700">
                         Kolom I: Netto Hasil (Kg)
                       </td>
-                      <td className="py-2.5 px-3 text-slate-500">Numerik Desimal 1 Koma</td>
+                      <td className="py-2.5 px-3 text-slate-500">Numerik Desimal 1 Koma (Auto-hitung jika di DHP bernilai 0)</td>
                     </tr>
                     <tr>
                       <td className="py-2.5 px-3 font-mono font-semibold text-slate-900">
