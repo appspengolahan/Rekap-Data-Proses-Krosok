@@ -16,7 +16,7 @@ export const MONTH_ORDER = [
 ];
 
 export const DEFAULT_CONFIG: GASConfig = {
-  gasUrl: 'https://script.google.com/macros/s/AKfycbxeEb8scH-foJUqk3FJzESg9Lyk77ZDGD_MJolWxgQ4xuEOcb7ddO9y7yws57Z9VDpX/exec',
+  gasUrl: 'https://script.google.com/macros/s/AKfycbxmUX71wkbeQ5BwmYU-cucKUwXh36sZJjQOiuC1H2haKz0DTJj_7TAwZ6O5eWuH9FOt/exec',
   spreadsheetId: '1A9GgHirYSNN26fG4emsFNOM4pod8xjn4gleWzCaTVzM',
   sheetName: 'REKAP SUSUT KROSOK',
   dhpSpreadsheetId: '1tyE6QWZOPhjLCsjvesU82QePF5RqEBToJsp1m0qQY_w',
@@ -40,13 +40,14 @@ export function loadConfig(): GASConfig {
     const saved = localStorage.getItem(STORAGE_KEYS.CONFIG);
     if (saved) {
       const parsed = JSON.parse(saved);
-      // Automatically migrate from old legacy URL if present in user's localStorage
-      if (parsed.gasUrl && parsed.gasUrl.includes('AKfycbwVZ9wwrsRcKVvuqV1y4jiaISEVqlRio_ydJwOPZ3FuLfGi67juwTEiGEhtnmv9z4N6tw')) {
+      // Automatically migrate to new standalone URL if user has older URL in localStorage
+      if (!parsed.gasUrl || parsed.gasUrl.includes('AKfycbxe') || parsed.gasUrl.includes('AKfycbw')) {
         parsed.gasUrl = DEFAULT_CONFIG.gasUrl;
       }
       return {
         ...DEFAULT_CONFIG,
         ...parsed,
+        gasUrl: parsed.gasUrl || DEFAULT_CONFIG.gasUrl,
         dhpSpreadsheetId: parsed.dhpSpreadsheetId || DEFAULT_CONFIG.dhpSpreadsheetId,
         dhpSheetName: parsed.dhpSheetName || DEFAULT_CONFIG.dhpSheetName,
       };
