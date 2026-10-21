@@ -72,6 +72,13 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
   const matchedCount = dhpItems.filter((i) => i.isMatchedInRekap && !i.needsUpdateInRekap).length;
   const newCount = dhpItems.filter((i) => !i.isMatchedInRekap).length;
   const totalBaku = dhpItems.reduce((acc, i) => acc + i.baku, 0);
+  const totalHasil = dhpItems.reduce((acc, i) => acc + (i.hasil || 0), 0);
+  const verifiedBaku = dhpItems.filter((i) => i.isMatchedInRekap).reduce((acc, i) => acc + (i.baku || 0), 0);
+  const verifiedHasil = dhpItems.filter((i) => i.isMatchedInRekap).reduce((acc, i) => acc + (i.hasil || 0), 0);
+  const verifiedSusutKg = dhpItems.filter((i) => i.isMatchedInRekap).reduce((acc, i) => acc + (i.susutKg || 0), 0);
+  const verifiedSusutPct = verifiedBaku > 0 ? (verifiedSusutKg / verifiedBaku) * 100 : 0;
+  const totalSusutKg = dhpItems.reduce((acc, i) => acc + (i.susutKg || 0), 0);
+  const overallSusutPct = totalBaku > 0 ? (totalSusutKg / totalBaku) * 100 : 0;
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -605,36 +612,48 @@ function perbaikiHasilNolDiRekap() {
             <div className="space-y-3 flex flex-col flex-1 min-h-0">
               {/* Compact Metrics Strip */}
               <div className={`grid grid-cols-1 ${needUpdateCount > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2 shrink-0`}>
-                <div className="bg-slate-50 rounded-lg px-3 py-2 border border-slate-200/90 flex items-center justify-between shadow-2xs">
+                <div className="bg-slate-50 rounded-lg px-3.5 py-2.5 border border-slate-200/90 flex items-center justify-between shadow-2xs">
                   <div>
                     <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                       Total Batch Aktif DHP
                     </div>
-                    <div className="text-base font-bold text-slate-900 mt-0.5 flex items-baseline gap-1.5">
+                    <div className="text-base font-bold text-slate-900 mt-0.5 flex items-baseline gap-1.5 flex-wrap">
                       <span>{dhpItems.length} Batch</span>
-                      <span className="text-[11px] font-medium text-slate-500">({formatNum(totalBaku)} Kg)</span>
-                    </div>
-                  </div>
-                  <Layers className="w-4 h-4 text-slate-400" />
-                </div>
-
-                <div className="bg-emerald-50/70 rounded-lg px-3 py-2 border border-emerald-200/90 flex items-center justify-between shadow-2xs">
-                  <div>
-                    <div className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wider">
-                      Terverifikasi di Rekap
-                    </div>
-                    <div className="text-base font-bold text-emerald-800 mt-0.5 flex items-baseline gap-1.5">
-                      <span>{matchedCount} Batch</span>
-                      <span className="text-[11px] font-semibold text-emerald-600">
-                        ({dhpItems.length ? Math.round((matchedCount / dhpItems.length) * 100) : 0}%)
+                      <span className="text-[11px] font-semibold text-blue-700 bg-blue-50/90 px-1.5 py-0.5 rounded border border-blue-200/80">
+                        {formatNum(totalBaku)} Kg Baku
                       </span>
                     </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5 font-medium">
+                      Bahan baku terinput di DHP
+                    </div>
                   </div>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <Layers className="w-4 h-4 text-slate-400 shrink-0" />
+                </div>
+
+                <div className="bg-emerald-50/70 rounded-lg px-3.5 py-2.5 border border-emerald-200/90 flex items-center justify-between shadow-2xs">
+                  <div>
+                    <div className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <span>Terverifikasi di Rekap</span>
+                      <span className="text-[9.5px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-200">
+                        {dhpItems.length ? Math.round((matchedCount / dhpItems.length) * 100) : 0}% Cocok
+                      </span>
+                    </div>
+                    <div className="text-base font-bold text-emerald-800 mt-0.5 flex items-baseline gap-1.5 flex-wrap">
+                      <span>{matchedCount} Batch</span>
+                      <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-100/90 px-1.5 py-0.5 rounded border border-emerald-300/80">
+                        {formatNum(verifiedHasil)} Kg Hasil
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-emerald-700 mt-0.5 font-medium flex items-center gap-1">
+                      <span>Susut: <strong>{formatNum(verifiedSusutKg)} Kg</strong></span>
+                      <span className="text-emerald-600/80">({formatPct(verifiedSusutPct)}%)</span>
+                    </div>
+                  </div>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                 </div>
 
                 {needUpdateCount > 0 && (
-                  <div className="bg-amber-50/90 rounded-lg px-3 py-2 border border-amber-300 flex items-center justify-between shadow-2xs animate-pulse">
+                  <div className="bg-amber-50/90 rounded-lg px-3.5 py-2.5 border border-amber-300 flex items-center justify-between shadow-2xs animate-pulse">
                     <div>
                       <div className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">
                         Perlu Diselaraskan
@@ -643,12 +662,15 @@ function perbaikiHasilNolDiRekap() {
                         <span>{needUpdateCount} Batch</span>
                         <span className="text-[11px] font-medium text-amber-700">Hasil Selesai</span>
                       </div>
+                      <div className="text-[10px] text-amber-700 mt-0.5 font-medium">
+                        Hasil DHP siap diupdate ke Rekap
+                      </div>
                     </div>
-                    <AlertCircle className="w-4 h-4 text-amber-600" />
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
                   </div>
                 )}
 
-                <div className={`rounded-lg px-3 py-2 border flex items-center justify-between shadow-2xs ${
+                <div className={`rounded-lg px-3.5 py-2.5 border flex items-center justify-between shadow-2xs ${
                   newCount > 0 ? 'bg-blue-50/90 border-blue-200' : 'bg-slate-50 rounded-lg border-slate-200/90'
                 }`}>
                   <div>
@@ -661,27 +683,39 @@ function perbaikiHasilNolDiRekap() {
                         {newCount === 0 ? 'Semua tersinkron' : 'Perlu dibukukan'}
                       </span>
                     </div>
+                    <div className="text-[10px] text-slate-500 mt-0.5 font-medium">
+                      {newCount === 0 ? 'Data DHP sudah sinkron' : `${newCount} baris baru ditemukan`}
+                    </div>
                   </div>
                   {newCount > 0 ? (
-                    <Sparkles className="w-4 h-4 text-blue-600 animate-pulse" />
+                    <Sparkles className="w-4 h-4 text-blue-600 animate-pulse shrink-0" />
                   ) : (
-                    <ShieldCheck className="w-4 h-4 text-slate-400" />
+                    <ShieldCheck className="w-4 h-4 text-slate-400 shrink-0" />
                   )}
                 </div>
               </div>
 
               {/* Table of DHP Items - The Main Hero Component */}
               <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs flex-1 flex flex-col min-h-[300px] bg-white">
-                <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
+                <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
                   <div className="flex items-center gap-2">
                     <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600" />
                     <span className="text-xs font-bold text-slate-800">
                       Daftar Transaksi DHP Terdeteksi (Tab {config.dhpSheetName})
                     </span>
                   </div>
-                  <span className="text-[11px] text-slate-500 font-medium">
-                    Menampilkan {dhpItems.length} baris proses aktif
-                  </span>
+                  <div className="flex items-center gap-2 text-[11px]">
+                    <span className="text-slate-500 font-medium hidden sm:inline">
+                      {dhpItems.length} baris aktif
+                    </span>
+                    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[11px] shadow-2xs text-slate-600 font-medium">
+                      <span>Baku: <strong className="text-slate-900 font-mono font-semibold">{formatNum(totalBaku)}</strong></span>
+                      <span className="text-slate-300">|</span>
+                      <span>Hasil: <strong className="text-emerald-700 font-mono font-semibold">{formatNum(totalHasil)}</strong></span>
+                      <span className="text-slate-300">|</span>
+                      <span>Susut: <strong className="text-rose-600 font-mono font-semibold">{formatNum(totalSusutKg)} Kg</strong> <span className="text-slate-400 text-[10px]">({formatPct(overallSusutPct)}%)</span></span>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="overflow-auto flex-1 max-h-[460px]">
@@ -780,6 +814,30 @@ function perbaikiHasilNolDiRekap() {
                         ))
                       )}
                     </tbody>
+                    {dhpItems.length > 0 && (
+                      <tfoot className="sticky bottom-0 bg-slate-100/95 backdrop-blur-xs font-bold text-slate-800 border-t-2 border-slate-300 text-xs shadow-2xs z-10">
+                        <tr>
+                          <td colSpan={4} className="py-2.5 px-3 text-right uppercase text-[10px] tracking-wider text-slate-600">
+                            Total Neraca ({dhpItems.length} Batch):
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-slate-900 font-bold">
+                            {formatNum(totalBaku)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-emerald-800 font-bold">
+                            {formatNum(totalHasil)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-rose-700 font-bold">
+                            {formatNum(totalSusutKg)}
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-slate-900 font-bold">
+                            {formatPct(overallSusutPct)}%
+                          </td>
+                          <td className="py-2.5 px-3.5 text-center text-[10px] text-emerald-700 font-semibold">
+                            {matchedCount}/{dhpItems.length} Terverifikasi
+                          </td>
+                        </tr>
+                      </tfoot>
+                    )}
                   </table>
                 </div>
               </div>
