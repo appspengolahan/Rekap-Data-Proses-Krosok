@@ -108,6 +108,8 @@ export interface DhpKrosokItem {
   jalurProses: 'SKT' | 'SKM' | string;
   isMatchedInRekap: boolean;
   matchedRow?: number;
+  needsUpdateInRekap?: boolean;
+  rekapHasil?: number;
 }
 
 export interface SwitchAppModule {

@@ -331,6 +331,9 @@ export async function fetchDhpKrosokRecords(
           return dateMatch && tembakauMatch && bakuMatch;
         });
 
+        const isMatched = Boolean(match);
+        const needsUpdate = Boolean(match && hasil > 0 && Math.abs(match.hasil - hasil) >= 0.5);
+
         items.push({
           id: `dhp_${i + 1}_${parsedDate.iso}_${baku}`,
           rowIdx: i + 1,
@@ -350,8 +353,10 @@ export async function fetchDhpKrosokRecords(
           susutKg,
           susutPct,
           jalurProses,
-          isMatchedInRekap: Boolean(match),
-          matchedRow: match?.srcRow
+          isMatchedInRekap: isMatched,
+          matchedRow: match?.srcRow,
+          needsUpdateInRekap: needsUpdate,
+          rekapHasil: match?.hasil
         });
       }
     }
