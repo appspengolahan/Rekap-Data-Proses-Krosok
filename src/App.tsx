@@ -6,7 +6,12 @@ import {
   UserRole,
   SyncStatus,
   SwitchAppModule,
-  DhpKrosokItem
+  DhpKrosokItem,
+  BaselineConfigMeta,
+  BatchFieldNote,
+  FactoryLocation,
+  FactoryWeatherData,
+  KrosokStandarAcuan
 } from './types';
 import {
   getCachedRecords,
@@ -18,9 +23,21 @@ import {
   fetchDhpKrosokRecords,
   getCachedDhpItems,
   setCachedDhpItems,
-  buildDashboardData,
-  MONTH_ORDER
+  buildDashboardData
 } from './services/dataService';
+import {
+  calculateBaselineFromPeriod,
+  loadBaselineMeta,
+  loadBatchNotes,
+  loadStandarAcuanList,
+  saveBaselineMeta,
+  saveBatchNote,
+  saveStandarAcuanList
+} from './services/acuanService';
+import {
+  fetchFactoryWeather,
+  setSelectedFactoryLocation
+} from './services/weatherService';
 import { loadSwitchApps, saveSwitchApps } from './data/switchAppDefault';
 import { Header } from './components/Header';
 import { Sidebar, NavTab } from './components/Sidebar';
@@ -28,6 +45,7 @@ import { QuickTabNav } from './components/QuickTabNav';
 import { FilterBar } from './components/FilterBar';
 import { SummaryCards } from './components/SummaryCards';
 import { TabBulan } from './components/TabBulan';
+import { TabAnalisisDeviasi } from './components/TabAnalisisDeviasi';
 import { TabJenis } from './components/TabJenis';
 import { DataLogView } from './components/DataLogView';
 import { TabSwitchApp } from './components/TabSwitchApp';
@@ -72,6 +90,61 @@ export default function App() {
 
   // DHP Krosok Items State
   const [dhpItems, setDhpItems] = useState<DhpKrosokItem[]>(() => getCachedDhpItems());
+
+  // Acuan Standar Susut, Mandor Field Notes & Factory Weather State (Shared Lapis 1 & Lapis 2)
+  const [baselineMeta, setBaselineMeta] = useState<BaselineConfigMeta>(() => loadBaselineMeta());
+  const [standarList, setStandarList] = useState<KrosokStandarAcuan[]>(() =>
+    loadStandarAcuanList(records)
+  );
+  const [batchNotes, setBatchNotes] = useState<Record<string, BatchFieldNote>>(() =>
+    loadBatchNotes()
+  );
+  const [weatherData, setWeatherData] = useState<FactoryWeatherData | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState<boolean>(false);
+
+  const refreshFactoryWeather = useCallback(async (locationOverride?: FactoryLocation) => {
+    setWeatherLoading(true);
+    try {
+      if (locationOverride) {
+        setSelectedFactoryLocation(locationOverride.id);
+      }
+      const w = await fetchFactoryWeather(locationOverride, Boolean(locationOverride));
+      setWeatherData(w);
+    } catch (err) {
+      console.warn('Weather fetch notice:', err);
+    } finally {
+      setWeatherLoading(false);
+    }
+  }, []);
+
+  const handleApplyBaseline = useCallback(
+    (newList: KrosokStandarAcuan[], newMeta: BaselineConfigMeta) => {
+      setStandarList(newList);
+      saveStandarAcuanList(newList);
+      setBaselineMeta(newMeta);
+      saveBaselineMeta(newMeta);
+      try {
+        localStorage.setItem('krosok_standar_acuan_customized_v1', 'true');
+      } catch {
+        // ignore
+      }
+    },
+    []
+  );
+
+  const handleUpdateStandarList = useCallback((newList: KrosokStandarAcuan[]) => {
+    setStandarList(newList);
+    saveStandarAcuanList(newList);
+    try {
+      localStorage.setItem('krosok_standar_acuan_customized_v1', 'true');
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleSaveBatchNote = useCallback((note: BatchFieldNote) => {
+    setBatchNotes((prev) => saveBatchNote(note, prev));
+  }, []);
 
   // Switch App Modules State (Synchronized across Header dropdown, Sidebar, and Tab Hub)
   const [switchApps, setSwitchApps] = useState<SwitchAppModule[]>(() => loadSwitchApps());
@@ -151,6 +224,26 @@ export default function App() {
         setConfig(updatedConfig);
         saveConfig(updatedConfig);
         setSyncStatus('synced');
+
+        // Refresh default weighted baseline if user has not manually locked custom overrides
+        try {
+          if (localStorage.getItem('krosok_standar_acuan_customized_v1') !== 'true') {
+            const meta = loadBaselineMeta();
+            const recomputed = calculateBaselineFromPeriod(
+              freshData,
+              meta.bulanMulai,
+              meta.bulanAkhir,
+              meta.tahunAcuan,
+              meta.globalWaspadaPct,
+              meta.globalOosPct,
+              meta.periodeLabel
+            );
+            setStandarList(recomputed);
+            saveStandarAcuanList(recomputed);
+          }
+        } catch {
+          // ignore
+        }
       } else {
         // Retain existing records smoothly
         setSyncStatus('idle');
@@ -168,14 +261,15 @@ export default function App() {
     }
   }, [config, refreshDhpData]);
 
-  // Initial Background Sync on App Mount
+  // Initial Background Sync & Factory Weather Fetch on App Mount
   useEffect(() => {
+    refreshFactoryWeather();
     // Initial silent sync after 300ms to let initial UI paint instantly
     const timer = setTimeout(() => {
       performSync(false);
     }, 300);
     return () => clearTimeout(timer);
-  }, [performSync]);
+  }, [performSync, refreshFactoryWeather]);
 
   // AutoSync Background Timer Interval
   useEffect(() => {
@@ -309,8 +403,8 @@ export default function App() {
 
         {/* Main Content Area (Independent scroll) */}
         <main className="flex-1 min-w-0 overflow-y-auto p-3 sm:p-5 lg:p-6 pb-24 md:pb-10">
-          {/* Global Filter Bar (Shown on dashboard data tabs) */}
-          {activeTab !== 'switch_app' && (
+          {/* Global Filter Bar (Shown on standard dashboard data tabs) */}
+          {activeTab !== 'switch_app' && activeTab !== 'analisis_deviasi' && (
             <FilterBar
               filterOptions={dashboardData.filterOptions}
               selectedTahun={selectedTahun}
@@ -378,6 +472,21 @@ export default function App() {
                 onExportTabPdf={handleExportTabPdf}
               />
             </div>
+          )}
+
+          {activeTab === 'analisis_deviasi' && (
+            <TabAnalisisDeviasi
+              records={records}
+              availableYears={dashboardData.filterOptions.tahun}
+              standarList={standarList}
+              baselineMeta={baselineMeta}
+              onApplyBaseline={handleApplyBaseline}
+              onUpdateStandarList={handleUpdateStandarList}
+              batchNotes={batchNotes}
+              weatherData={weatherData}
+              weatherLoading={weatherLoading}
+              onRefreshWeather={refreshFactoryWeather}
+            />
           )}
 
           {activeTab === 'jenis' && (
@@ -462,6 +571,12 @@ export default function App() {
         dhpItems={dhpItems}
         onRefreshDhp={refreshDhpData}
         onAppendRecordsToRekap={handleAppendRecordsToRekap}
+        standarList={standarList}
+        baselineMeta={baselineMeta}
+        batchNotes={batchNotes}
+        onSaveBatchNote={handleSaveBatchNote}
+        weatherData={weatherData}
+        onNavigateToAnalisisTab={() => setActiveTab('analisis_deviasi')}
       />
 
       <NewEntryModal

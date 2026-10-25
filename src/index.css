@@ -1,5 +1,18 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.font-mono {
+  font-variant-numeric: tabular-nums;
+}
+
+.official-pdf-only {
+  display: none;
+}
+
 @layer utilities {
   @media print {
     /* Hide all navigation buttons, action buttons, modals, sidebars, headers, and any element marked with no-print */
@@ -25,6 +38,16 @@
       display: none !important;
     }
 
+    /* Official Monthly Evaluation PDF Mode: show ONLY the structured A4 formal report */
+    body.print-evaluasi-pdf .screen-workspace-content,
+    body.print-evaluasi-pdf .summary-cards-section {
+      display: none !important;
+    }
+
+    body.print-evaluasi-pdf .official-pdf-only {
+      display: block !important;
+    }
+
     /* Allow document body and main content to expand cleanly without being clipped to 1 screen */
     html,
     body,
@@ -34,9 +57,11 @@
       min-height: 100% !important;
       overflow: visible !important;
       background: white !important;
-      color: black !important;
+      color: #0f172a !important;
       padding: 0 !important;
       margin: 0 !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
     }
 
     main {
@@ -47,9 +72,9 @@
       height: auto !important;
     }
 
-    /* Prevent page break cuts inside cards and tables */
-    table,
+    /* Prevent page break cuts inside cards and table rows */
     tr,
+    .avoid-break,
     .rounded-3xl,
     .rounded-2xl {
       break-inside: avoid;

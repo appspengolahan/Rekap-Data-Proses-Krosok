@@ -1,5 +1,13 @@
 import React from 'react';
-import { BarChart3, Calendar, Layers, FileSpreadsheet, PlusCircle, AppWindow } from 'lucide-react';
+import {
+  BarChart3,
+  Calendar,
+  Scale,
+  Layers,
+  FileSpreadsheet,
+  PlusCircle,
+  AppWindow
+} from 'lucide-react';
 import { NavTab } from './Sidebar';
 import { UserRole } from '../types';
 
@@ -19,6 +27,7 @@ export const QuickTabNav: React.FC<QuickTabNavProps> = ({
   const items = [
     { id: 'overview' as NavTab, label: 'Ringkasan', icon: BarChart3 },
     { id: 'bulan' as NavTab, label: 'Bulan', icon: Calendar },
+    { id: 'analisis_deviasi' as NavTab, label: 'Deviasi', icon: Scale },
     { id: 'jenis' as NavTab, label: 'Krosok', icon: Layers },
     { id: 'data_log' as NavTab, label: 'Log Harian', icon: FileSpreadsheet },
     { id: 'switch_app' as NavTab, label: 'Switch', icon: AppWindow },

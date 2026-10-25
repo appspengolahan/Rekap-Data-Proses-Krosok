@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
   Database,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Copy,
   Check,
   RefreshCw,
@@ -17,10 +18,29 @@ import {
   Clock,
   Calendar,
   Send,
-  Radio
+  Radio,
+  Tag,
+  Thermometer,
+  Droplets,
+  Sliders,
+  Info
 } from 'lucide-react';
-import { DhpKrosokItem, GASConfig, KrosokRecord } from '../types';
+import {
+  BaselineConfigMeta,
+  BatchFieldNote,
+  DhpKrosokItem,
+  FactoryWeatherData,
+  GASConfig,
+  KrosokRecord,
+  KrosokStandarAcuan,
+  TacticalBatchEvaluation
+} from '../types';
 import { formatNum, formatPct, round2 } from '../services/dataService';
+import {
+  DEFAULT_BASELINE_META,
+  evaluateDhpBatch,
+  QUICK_TAG_OPTIONS
+} from '../services/acuanService';
 
 interface ModalDhpIntegrasiProps {
   isOpen: boolean;
@@ -29,6 +49,12 @@ interface ModalDhpIntegrasiProps {
   dhpItems: DhpKrosokItem[];
   onRefreshDhp: () => Promise<void>;
   onAppendRecordsToRekap?: (newRecords: KrosokRecord[]) => void;
+  standarList?: KrosokStandarAcuan[];
+  baselineMeta?: BaselineConfigMeta;
+  batchNotes?: Record<string, BatchFieldNote>;
+  onSaveBatchNote?: (note: BatchFieldNote) => void;
+  weatherData?: FactoryWeatherData | null;
+  onNavigateToAnalisisTab?: () => void;
 }
 
 export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
@@ -37,13 +63,33 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
   config,
   dhpItems,
   onRefreshDhp,
-  onAppendRecordsToRekap
+  onAppendRecordsToRekap,
+  standarList = [],
+  baselineMeta = DEFAULT_BASELINE_META,
+  batchNotes = {},
+  onSaveBatchNote,
+  weatherData = null,
+  onNavigateToAnalisisTab
 }) => {
   const [activeTab, setActiveTab] = useState<'preview' | 'script' | 'mapping'>('preview');
   const [refreshing, setRefreshing] = useState(false);
   const [syncingToRekap, setSyncingToRekap] = useState(false);
   const [syncSuccessMsg, setSyncSuccessMsg] = useState<string | null>(null);
   const [copiedScript, setCopiedScript] = useState(false);
+
+  // Tactical Control States: Floating Diagnosa Kilat & Quick Tag Modal
+  const [diagPopover, setDiagPopover] = useState<{
+    item: DhpKrosokItem;
+    evalData: TacticalBatchEvaluation;
+    rect: { top: number; left: number; bottom: number };
+  } | null>(null);
+
+  const [tagEditorTarget, setTagEditorTarget] = useState<{
+    item: DhpKrosokItem;
+    evalData: TacticalBatchEvaluation;
+  } | null>(null);
+  const [draftTags, setDraftTags] = useState<string[]>([]);
+  const [draftCatatan, setDraftCatatan] = useState<string>('');
 
   // Live Auto-Sync State (Aman 12 detik, zero-risk pemblokiran kuota Google)
   const [isLiveSyncActive, setIsLiveSyncActive] = useState(true);
@@ -66,7 +112,59 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
     return () => clearInterval(timer);
   }, [isOpen, isLiveSyncActive, onRefreshDhp]);
 
+  // Evaluate all active DHP items against active Baseline & Weather
+  const tacticalMap = useMemo(() => {
+    const map: Record<string, TacticalBatchEvaluation> = {};
+    dhpItems.forEach((item) => {
+      map[item.id] = evaluateDhpBatch(item, standarList, batchNotes, weatherData);
+    });
+    return map;
+  }, [dhpItems, standarList, batchNotes, weatherData]);
+
   if (!isOpen) return null;
+
+  const evalValues = Object.values(tacticalMap);
+  const normalBatchCount = evalValues.filter((e) => e.status === 'normal').length;
+  const waspadaBatchCount = evalValues.filter((e) => e.status === 'waspada').length;
+  const oosBatchCount = evalValues.filter((e) => e.status === 'oos').length;
+  const untaggedOosCount = evalValues.filter(
+    (e) => e.status === 'oos' && e.tags.length === 0
+  ).length;
+
+  const openQuickTagEditor = (
+    item: DhpKrosokItem,
+    evalData: TacticalBatchEvaluation
+  ) => {
+    setTagEditorTarget({ item, evalData });
+    setDraftTags([...evalData.tags]);
+    setDraftCatatan(evalData.catatan || '');
+    setDiagPopover(null);
+  };
+
+  const toggleDraftTag = (tag: string) => {
+    setDraftTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
+  };
+
+  const handleSaveQuickTag = () => {
+    if (!tagEditorTarget || !onSaveBatchNote) {
+      setTagEditorTarget(null);
+      return;
+    }
+    const variantName =
+      tagEditorTarget.item.jenisKrosokMaster || tagEditorTarget.item.jenisTembakau;
+    onSaveBatchNote({
+      batchKey: tagEditorTarget.evalData.batchKey,
+      tanggal: tagEditorTarget.item.tanggal,
+      jenisKrosok: variantName,
+      jalurProses: tagEditorTarget.item.jalurProses,
+      tags: draftTags,
+      catatan: draftCatatan.trim(),
+      updatedAt: new Date().toISOString()
+    });
+    setTagEditorTarget(null);
+  };
 
   const needUpdateCount = dhpItems.filter((i) => i.needsUpdateInRekap).length;
   const matchedCount = dhpItems.filter((i) => i.isMatchedInRekap && !i.needsUpdateInRekap).length;
@@ -695,8 +793,61 @@ function perbaikiHasilNolDiRekap() {
                 </div>
               </div>
 
+              {/* Tactical Control Bar: Acuan Aktif, Cuaca Pabrik & Ringkasan Deviasi Harian */}
+              <div className="px-3.5 py-2 rounded-lg bg-slate-900 text-white flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-sky-300">
+                    Tactical Control:
+                  </span>
+                  <span className="text-slate-300">
+                    Acuan Aktif <strong className="text-white">{baselineMeta.periodeLabel}</strong>
+                  </span>
+                  {weatherData && (
+                    <>
+                      <span className="text-slate-600" aria-hidden="true">·</span>
+                      <span className="inline-flex items-center gap-1 text-slate-300 font-mono text-[11px]">
+                        <Thermometer className="w-3 h-3 text-amber-400" />
+                        <span>{weatherData.temperature.toFixed(1)}°C</span>
+                        <Droplets className="w-3 h-3 text-sky-400 ml-1" />
+                        <span>RH {Math.round(weatherData.humidity)}%</span>
+                        <span className="font-sans text-slate-400">
+                          ({weatherData.hygroIndex.status})
+                        </span>
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                  <span className="font-mono text-emerald-300">
+                    Normal: {normalBatchCount}
+                  </span>
+                  <span className="text-slate-600">·</span>
+                  <span className="font-mono text-amber-300">
+                    Waspada: {waspadaBatchCount}
+                  </span>
+                  <span className="text-slate-600">·</span>
+                  <span className="font-mono text-rose-300 font-bold">
+                    OOS: {oosBatchCount}
+                  </span>
+                  {onNavigateToAnalisisTab && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onNavigateToAnalisisTab();
+                      }}
+                      className="ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 text-[10px] font-semibold transition-colors cursor-pointer"
+                    >
+                      <Sliders className="w-3 h-3" />
+                      <span>Evaluasi &amp; Acuan</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
               {/* Table of DHP Items - The Main Hero Component */}
-              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs flex-1 flex flex-col min-h-[300px] bg-white">
+              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs flex-1 flex flex-col min-h-[280px] bg-white">
                 <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
                   <div className="flex items-center gap-2">
                     <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600" />
@@ -718,100 +869,237 @@ function perbaikiHasilNolDiRekap() {
                   </div>
                 </div>
 
-                <div className="overflow-auto flex-1 max-h-[460px]">
+                <div
+                  className="overflow-auto flex-1 max-h-[430px]"
+                  onScroll={() => {
+                    if (diagPopover) setDiagPopover(null);
+                  }}
+                >
                   <table className="w-full text-xs text-left">
                     <thead className="sticky top-0 bg-slate-100 z-10 text-slate-700 font-semibold border-b border-slate-200 uppercase text-[10px] tracking-wider shadow-2xs">
                       <tr>
-                        <th className="py-2 px-3 text-center w-14">Row</th>
-                        <th className="py-2 px-3">Tanggal & Waktu</th>
-                        <th className="py-2 px-3">Jenis Tembakau</th>
+                        <th className="py-2 px-2.5 text-center w-12">Row</th>
+                        <th className="py-2 px-3">Tanggal &amp; Waktu</th>
+                        <th className="py-2 px-3">Jenis Krosok</th>
                         <th className="py-2 px-2 text-center w-14">Jalur</th>
-                        <th className="py-2 px-3 text-right">Netto Baku (Kg)</th>
-                        <th className="py-2 px-3 text-right">Hasil (Kg)</th>
-                        <th className="py-2 px-3 text-right text-rose-700">Susut (Kg)</th>
-                        <th className="py-2 px-3 text-right text-rose-700">Susut (%)</th>
-                        <th className="py-2 px-3.5 text-center">Status Integrasi Rekap</th>
+                        <th className="py-2 px-2.5 text-right">Baku (Kg)</th>
+                        <th className="py-2 px-2.5 text-right">Hasil (Kg)</th>
+                        <th className="py-2 px-2.5 text-right text-rose-700">Susut (Kg)</th>
+                        <th className="py-2 px-2.5 text-right text-rose-700">Susut (%)</th>
+                        <th className="py-2 px-3 text-center">Status Deviasi</th>
+                        <th className="py-2 px-3">Quick Tag Lapangan</th>
+                        <th className="py-2 px-3 text-center">Status Rekap</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
                       {dhpItems.length === 0 ? (
                         <tr>
-                          <td colSpan={9} className="py-10 text-center text-slate-400">
+                          <td colSpan={11} className="py-10 text-center text-slate-400">
                             Tidak ditemukan baris transaksi aktif pada Sheet DHP Krosok.
                           </td>
                         </tr>
                       ) : (
-                        dhpItems.map((item) => (
-                          <tr key={item.id} className="hover:bg-blue-50/40 transition-colors">
-                            <td className="py-2 px-3 text-center font-mono text-[11px] text-slate-400">
-                              {item.rowIdx}
-                            </td>
-                            <td className="py-2 px-3 font-medium text-slate-800 whitespace-nowrap">
-                              <div>{item.tanggalDisplay}</div>
-                              {item.waktu && (
-                                <div className="text-[10px] text-slate-400 flex items-center gap-1 mt-0.5">
-                                  <Clock className="w-3 h-3" />
-                                  <span>{item.waktu}</span>
-                                </div>
-                              )}
-                            </td>
-                            <td className="py-2 px-3 font-semibold text-slate-900">
-                              <div>{item.jenisTembakau}</div>
-                              {item.kodeStock && (
-                                <div className="text-[10px] text-slate-400 font-normal">
-                                  Stock: {item.kodeStock}
-                                </div>
-                              )}
-                            </td>
-                            <td className="py-2 px-2 text-center">
-                              <span
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                  item.jalurProses === 'SKT'
-                                    ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                                    : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                                }`}
-                              >
-                                {item.jalurProses}
-                              </span>
-                            </td>
-                            <td className="py-2 px-3 text-right font-bold text-slate-900">
-                              {formatNum(item.baku)}
-                            </td>
-                            <td className="py-2 px-3 text-right font-medium text-slate-700">
-                              {item.hasil > 0 ? (
-                                <span className="font-semibold text-emerald-800">{formatNum(item.hasil)}</span>
-                              ) : (
-                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200" title="Proses belum selesai atau menunggu data hasil">
-                                  0,0 (Proses)
+                        dhpItems.map((item) => {
+                          const evalItem = tacticalMap[item.id];
+                          return (
+                            <tr
+                              key={item.id}
+                              className={`hover:bg-blue-50/40 transition-colors ${
+                                evalItem?.status === 'oos' ? 'bg-rose-50/25' : ''
+                              }`}
+                            >
+                              <td className="py-2 px-2.5 text-center font-mono text-[11px] text-slate-400">
+                                {item.rowIdx}
+                              </td>
+                              <td className="py-2 px-3 font-medium text-slate-800 whitespace-nowrap">
+                                <div>{item.tanggalDisplay}</div>
+                                {item.waktu && (
+                                  <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
+                                    <Clock className="w-3 h-3" />
+                                    <span>{item.waktu}</span>
+                                  </div>
+                                )}
+                              </td>
+                              <td className="py-2 px-3 font-semibold text-slate-900">
+                                <div>{item.jenisTembakau}</div>
+                                {item.kodeStock && (
+                                  <div className="text-[10px] text-slate-400 font-normal font-mono">
+                                    Stock: {item.kodeStock}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="py-2 px-2 text-center">
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                    item.jalurProses === 'SKT'
+                                      ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                      : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                  }`}
+                                >
+                                  {item.jalurProses}
                                 </span>
-                              )}
-                            </td>
-                            <td className="py-2 px-3 text-right font-medium text-rose-700">
-                              {formatNum(item.susutKg)}
-                            </td>
-                            <td className="py-2 px-3 text-right font-semibold text-slate-800">
-                              {formatPct(item.susutPct)}%
-                            </td>
-                            <td className="py-2 px-3.5 text-center whitespace-nowrap">
-                              {item.needsUpdateInRekap ? (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-300">
-                                  <AlertCircle className="w-3 h-3 text-amber-600" />
-                                  <span>Hasil Berubah (Rekap {formatNum(item.rekapHasil)} Kg ➔ DHP {formatNum(item.hasil)} Kg)</span>
-                                </span>
-                              ) : item.isMatchedInRekap ? (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                  <Check className="w-3 h-3 text-emerald-600" />
-                                  <span>Cocok di Rekap (Baris {item.matchedRow})</span>
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200 animate-pulse">
-                                  <Sparkles className="w-3 h-3 text-blue-600" />
-                                  <span>Batch Baru (Siap Masuk)</span>
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        ))
+                              </td>
+                              <td className="py-2 px-2.5 text-right font-mono font-bold text-slate-900">
+                                {formatNum(item.baku)}
+                              </td>
+                              <td className="py-2 px-2.5 text-right font-mono font-medium text-slate-700">
+                                {item.hasil > 0 ? (
+                                  <span className="font-semibold text-emerald-800">{formatNum(item.hasil)}</span>
+                                ) : (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold bg-amber-50 text-amber-700 border border-amber-200" title="Proses belum selesai atau menunggu data hasil">
+                                    0,0 (Proses)
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2 px-2.5 text-right font-mono font-medium text-rose-700">
+                                {formatNum(item.susutKg)}
+                              </td>
+                              <td className="py-2 px-2.5 text-right font-mono font-semibold text-slate-800">
+                                <div>{formatPct(item.susutPct)}%</div>
+                                {evalItem && evalItem.status !== 'proses' && (
+                                  <div className="text-[10px] text-slate-400 font-normal">
+                                    Acuan {formatPct(evalItem.acuanPct)}%
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* KOLOM BARU 1: STATUS DEVIASI + TOOLTIP DIAGNOSA KILAT */}
+                              <td className="py-2 px-3 text-center whitespace-nowrap">
+                                {evalItem && (
+                                  <button
+                                    type="button"
+                                    onMouseEnter={(e) => {
+                                      const r = e.currentTarget.getBoundingClientRect();
+                                      setDiagPopover({
+                                        item,
+                                        evalData: evalItem,
+                                        rect: { top: r.top, left: r.left + r.width / 2, bottom: r.bottom }
+                                      });
+                                    }}
+                                    onMouseLeave={() => setDiagPopover(null)}
+                                    onClick={(e) => {
+                                      const r = e.currentTarget.getBoundingClientRect();
+                                      setDiagPopover((prev) =>
+                                        prev?.item.id === item.id
+                                          ? null
+                                          : {
+                                              item,
+                                              evalData: evalItem,
+                                              rect: { top: r.top, left: r.left + r.width / 2, bottom: r.bottom }
+                                            }
+                                      );
+                                    }}
+                                    className={`inline-flex flex-col items-center px-2 py-0.5 rounded-md border text-[10px] font-bold transition-colors cursor-pointer ${
+                                      evalItem.status === 'oos'
+                                        ? 'bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100'
+                                        : evalItem.status === 'waspada'
+                                        ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                                        : evalItem.status === 'proses'
+                                        ? 'bg-slate-100 text-slate-600 border-slate-200'
+                                        : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                    }`}
+                                  >
+                                    <span className="inline-flex items-center gap-1">
+                                      {evalItem.status === 'oos' && (
+                                        <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                                      )}
+                                      {evalItem.status === 'waspada' && (
+                                        <Info className="w-3 h-3 text-amber-600 shrink-0" />
+                                      )}
+                                      {evalItem.status === 'normal' && (
+                                        <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                                      )}
+                                      <span>
+                                        {evalItem.status === 'oos'
+                                          ? 'OOS'
+                                          : evalItem.status === 'waspada'
+                                          ? 'Waspada'
+                                          : evalItem.status === 'proses'
+                                          ? 'Proses'
+                                          : 'Normal'}
+                                      </span>
+                                    </span>
+                                    {evalItem.status !== 'proses' && (
+                                      <span className="font-mono text-[9.5px] font-semibold opacity-90">
+                                        {evalItem.deviasiPct >= 0 ? '+' : ''}
+                                        {formatPct(evalItem.deviasiPct)}%
+                                      </span>
+                                    )}
+                                  </button>
+                                )}
+                              </td>
+
+                              {/* KOLOM BARU 2: QUICK TAG LAPANGAN (MANDOR) */}
+                              <td className="py-2 px-3">
+                                {evalItem && (
+                                  <div className="flex flex-col items-start gap-1">
+                                    {evalItem.tags.length > 0 ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => openQuickTagEditor(item, evalItem)}
+                                        className="text-left group cursor-pointer"
+                                        title="Klik untuk mengubah alasan lapangan"
+                                      >
+                                        <div className="text-[10.5px] font-semibold text-blue-700 group-hover:underline leading-tight">
+                                          {evalItem.tags[0]}
+                                          {evalItem.tags.length > 1 && (
+                                            <span className="text-slate-500 font-normal">
+                                              {' '}
+                                              +{evalItem.tags.length - 1}
+                                            </span>
+                                          )}
+                                        </div>
+                                        {evalItem.catatan && (
+                                          <div className="text-[10px] text-slate-500 truncate max-w-[140px]">
+                                            "{evalItem.catatan}"
+                                          </div>
+                                        )}
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => openQuickTagEditor(item, evalItem)}
+                                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-semibold border transition-colors whitespace-nowrap cursor-pointer ${
+                                          evalItem.status === 'oos'
+                                            ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                                            : evalItem.status === 'waspada'
+                                            ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                                            : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200'
+                                        }`}
+                                      >
+                                        <Tag className="w-3 h-3 shrink-0" />
+                                        <span>
+                                          {evalItem.status === 'oos'
+                                            ? 'Tandai Alasan'
+                                            : '+ Quick Tag'}
+                                        </span>
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </td>
+
+                              <td className="py-2 px-3 text-center whitespace-nowrap">
+                                {item.needsUpdateInRekap ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-300">
+                                    <AlertCircle className="w-3 h-3 text-amber-600" />
+                                    <span>Hasil Berubah (Rekap {formatNum(item.rekapHasil)} ➔ DHP {formatNum(item.hasil)})</span>
+                                  </span>
+                                ) : item.isMatchedInRekap ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    <Check className="w-3 h-3 text-emerald-600" />
+                                    <span>Cocok (Brs {item.matchedRow})</span>
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                    <Sparkles className="w-3 h-3 text-blue-600" />
+                                    <span>Batch Baru</span>
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                     {dhpItems.length > 0 && (
@@ -820,19 +1108,25 @@ function perbaikiHasilNolDiRekap() {
                           <td colSpan={4} className="py-2.5 px-3 text-right uppercase text-[10px] tracking-wider text-slate-600">
                             Total Neraca ({dhpItems.length} Batch):
                           </td>
-                          <td className="py-2.5 px-3 text-right text-slate-900 font-bold">
+                          <td className="py-2.5 px-2.5 text-right font-mono text-slate-900 font-bold">
                             {formatNum(totalBaku)}
                           </td>
-                          <td className="py-2.5 px-3 text-right text-emerald-800 font-bold">
+                          <td className="py-2.5 px-2.5 text-right font-mono text-emerald-800 font-bold">
                             {formatNum(totalHasil)}
                           </td>
-                          <td className="py-2.5 px-3 text-right text-rose-700 font-bold">
+                          <td className="py-2.5 px-2.5 text-right font-mono text-rose-700 font-bold">
                             {formatNum(totalSusutKg)}
                           </td>
-                          <td className="py-2.5 px-3 text-right text-slate-900 font-bold">
+                          <td className="py-2.5 px-2.5 text-right font-mono text-slate-900 font-bold">
                             {formatPct(overallSusutPct)}%
                           </td>
-                          <td className="py-2.5 px-3.5 text-center text-[10px] text-emerald-700 font-semibold">
+                          <td className="py-2.5 px-3 text-center text-[10px] font-mono text-slate-700">
+                            {oosBatchCount > 0 ? `${oosBatchCount} OOS` : 'Terkendali'}
+                          </td>
+                          <td className="py-2.5 px-3 text-[10px] text-slate-600">
+                            {evalValues.filter((e) => e.tags.length > 0).length} Bertag
+                          </td>
+                          <td className="py-2.5 px-3 text-center text-[10px] text-emerald-700 font-semibold">
                             {matchedCount}/{dhpItems.length} Terverifikasi
                           </td>
                         </tr>
@@ -843,22 +1137,29 @@ function perbaikiHasilNolDiRekap() {
               </div>
 
               {/* Compact Bottom Action Bar */}
-              <div className="px-3.5 py-2 bg-gradient-to-r from-blue-50/70 to-indigo-50/70 rounded-lg border border-blue-200/80 flex items-center justify-between gap-3 shrink-0">
-                <div className="flex items-center gap-2 text-xs">
-                  <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
-                  <span className="text-slate-700 font-medium text-[11px]">
-                    {needUpdateCount > 0
-                      ? `Terdapat ${needUpdateCount} batch selesai yang perlu diselaraskan ke Rekap${newCount > 0 ? ` dan ${newCount} batch baru` : ''}.`
-                      : newCount > 0
-                      ? `Terdapat ${newCount} batch baru yang siap dibukukan ke baris baru Sheet Rekap.`
-                      : `Semua ${dhpItems.length} baris data DHP sudah tersinkronisasi presisi di Sheet Rekap.`}
-                  </span>
+              <div className="px-3.5 py-2 bg-gradient-to-r from-blue-50/70 to-indigo-50/70 rounded-lg border border-blue-200/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 text-xs">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
+                    <span className="text-slate-700 font-medium text-[11px]">
+                      {needUpdateCount > 0
+                        ? `Terdapat ${needUpdateCount} batch selesai yang perlu diselaraskan ke Rekap${newCount > 0 ? ` dan ${newCount} batch baru` : ''}.`
+                        : newCount > 0
+                        ? `Terdapat ${newCount} batch baru yang siap dibukukan ke baris baru Sheet Rekap.`
+                        : `Semua ${dhpItems.length} baris data DHP sudah tersinkronisasi presisi di Sheet Rekap.`}
+                    </span>
+                  </div>
+                  {untaggedOosCount > 0 && (
+                    <span className="text-[11px] font-semibold text-rose-700">
+                      · Perhatian: {untaggedOosCount} batch OOS belum diberi Quick Tag Mandor
+                    </span>
+                  )}
                 </div>
 
                 <button
                   onClick={handleSyncToRekap}
                   disabled={syncingToRekap}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs transition-colors disabled:opacity-50 shrink-0"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs transition-colors disabled:opacity-50 shrink-0 cursor-pointer"
                 >
                   <Send className={`w-3.5 h-3.5 ${syncingToRekap ? 'animate-spin' : ''}`} />
                   <span>
@@ -870,6 +1171,227 @@ function perbaikiHasilNolDiRekap() {
                   </span>
                 </button>
               </div>
+
+              {/* FLOATING TOOLTIP DIAGNOSA KILAT (Hover / Tap Escape-Clip Safe) */}
+              {diagPopover && (
+                <div
+                  className="fixed z-[75] w-80 p-3.5 rounded-xl bg-slate-900 text-white shadow-2xl border border-slate-700 text-xs pointer-events-none"
+                  style={{
+                    top:
+                      diagPopover.rect.top > 260
+                        ? `${diagPopover.rect.top - 10}px`
+                        : `${diagPopover.rect.bottom + 10}px`,
+                    left: `${Math.min(
+                      window.innerWidth - 180,
+                      Math.max(180, diagPopover.rect.left)
+                    )}px`,
+                    transform:
+                      diagPopover.rect.top > 260
+                        ? 'translate(-50%, -100%)'
+                        : 'translate(-50%, 0)'
+                  }}
+                >
+                  <div className="flex items-center justify-between gap-2 border-b border-slate-700 pb-2 mb-2">
+                    <div className="font-bold text-white truncate">
+                      {diagPopover.item.jenisTembakau}
+                    </div>
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase shrink-0 ${
+                        diagPopover.evalData.status === 'oos'
+                          ? 'bg-rose-600 text-white'
+                          : diagPopover.evalData.status === 'waspada'
+                          ? 'bg-amber-500 text-slate-950'
+                          : 'bg-emerald-600 text-white'
+                      }`}
+                    >
+                      {diagPopover.evalData.status}
+                    </span>
+                  </div>
+
+                  {diagPopover.evalData.status === 'proses' ? (
+                    <p className="text-[11px] text-slate-300 leading-relaxed">
+                      {diagPopover.evalData.penjelasanKilat}
+                    </p>
+                  ) : (
+                    <div className="space-y-2 text-[11px]">
+                      <div className="grid grid-cols-3 gap-1.5 bg-slate-800/90 p-2 rounded-lg font-mono text-center">
+                        <div>
+                          <div className="text-[9.5px] text-slate-400 font-sans">Riil</div>
+                          <div className="font-bold text-white">
+                            {formatPct(diagPopover.item.susutPct)}%
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[9.5px] text-slate-400 font-sans">Acuan</div>
+                          <div className="font-bold text-emerald-300">
+                            {formatPct(diagPopover.evalData.acuanPct)}%
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[9.5px] text-slate-400 font-sans">Deviasi</div>
+                          <div
+                            className={`font-bold ${
+                              diagPopover.evalData.status === 'oos'
+                                ? 'text-rose-400'
+                                : diagPopover.evalData.status === 'waspada'
+                                ? 'text-amber-300'
+                                : 'text-emerald-300'
+                            }`}
+                          >
+                            {diagPopover.evalData.deviasiPct >= 0 ? '+' : ''}
+                            {formatPct(diagPopover.evalData.deviasiPct)}%
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="text-[10px] font-semibold text-slate-400">
+                          Dekomposisi Limbah &amp; Neraca Massa:
+                        </div>
+                        <div className="flex justify-between font-mono text-[10.5px]">
+                          <span className="text-slate-300">Kadar Air / Uap:</span>
+                          <span className="text-sky-300 font-semibold">
+                            {diagPopover.evalData.uapAirKg >= 0 ? '+' : ''}
+                            {formatNum(diagPopover.evalData.uapAirKg)} Kg (
+                            {formatPct(diagPopover.evalData.uapAirPct)}%)
+                          </span>
+                        </div>
+                        <div className="flex justify-between font-mono text-[10.5px]">
+                          <span className="text-slate-300">Fraksi Gagang:</span>
+                          <span>
+                            {formatNum(diagPopover.evalData.gagangKg)} Kg (
+                            {formatPct(diagPopover.evalData.gagangPct)}%)
+                          </span>
+                        </div>
+                        <div className="flex justify-between font-mono text-[10.5px]">
+                          <span className="text-slate-300">Fraksi Debu:</span>
+                          <span>
+                            {formatNum(diagPopover.evalData.debuKg)} Kg (
+                            {formatPct(diagPopover.evalData.debuPct)}%)
+                          </span>
+                        </div>
+                      </div>
+
+                      {diagPopover.evalData.weatherAtBatch && (
+                        <div className="pt-1.5 border-t border-slate-800 flex items-center justify-between text-[10.5px] text-slate-300">
+                          <span>Cuaca Jam Proses ({diagPopover.item.waktu || 'Pabrik'}):</span>
+                          <span className="font-mono text-amber-300">
+                            {diagPopover.evalData.weatherAtBatch.temperature.toFixed(1)}°C · RH{' '}
+                            {Math.round(diagPopover.evalData.weatherAtBatch.humidity)}%
+                          </span>
+                        </div>
+                      )}
+
+                      <div className="pt-1.5 border-t border-slate-800 text-[10.5px] text-slate-200 leading-snug">
+                        <strong className="text-sky-300">
+                          {diagPopover.evalData.diagnosaUtama}:
+                        </strong>{' '}
+                        {diagPopover.evalData.penjelasanKilat}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* MODAL POPOVER QUICK TAG LAPANGAN (MANDOR) */}
+              {tagEditorTarget && (
+                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-xs">
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-5 space-y-4">
+                    <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                      <div>
+                        <div className="text-[11px] font-semibold text-blue-600">
+                          Quick Tag Lapangan — Kontrol Harian Mandor
+                        </div>
+                        <h4 className="text-sm font-bold text-slate-900 mt-0.5">
+                          {tagEditorTarget.item.jenisTembakau} ({tagEditorTarget.item.jalurProses})
+                        </h4>
+                        <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                          {tagEditorTarget.item.tanggalDisplay} · Baku{' '}
+                          {formatNum(tagEditorTarget.item.baku)} Kg · Susut{' '}
+                          {formatPct(tagEditorTarget.item.susutPct)}% (Acuan{' '}
+                          {formatPct(tagEditorTarget.evalData.acuanPct)}%)
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setTagEditorTarget(null)}
+                        className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-3 text-xs">
+                      <div>
+                        <div className="font-semibold text-slate-700 mb-2">
+                          Pilih Faktor Penyebab Khusus Hari Ini (Bisa lebih dari 1):
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {QUICK_TAG_OPTIONS.map((tagOpt) => {
+                            const active = draftTags.includes(tagOpt);
+                            return (
+                              <button
+                                key={tagOpt}
+                                type="button"
+                                onClick={() => toggleDraftTag(tagOpt)}
+                                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                                  active
+                                    ? 'bg-blue-600 text-white border-blue-600'
+                                    : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
+                                }`}
+                              >
+                                {tagOpt}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block font-semibold text-slate-700 mb-1">
+                          Catatan Singkat Mandor / Operator (Opsional):
+                        </label>
+                        <input
+                          type="text"
+                          value={draftCatatan}
+                          onChange={(e) => setDraftCatatan(e.target.value)}
+                          placeholder="Contoh: Bal masuk lembab pagi hari / setelan saringan baru..."
+                          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDraftTags([]);
+                          setDraftCatatan('');
+                        }}
+                        className="text-xs font-semibold text-rose-600 hover:underline cursor-pointer"
+                      >
+                        Reset Pilihan
+                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setTagEditorTarget(null)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                        >
+                          Batal
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveQuickTag}
+                          className="px-4 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
+                        >
+                          Simpan Tag Lapangan
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

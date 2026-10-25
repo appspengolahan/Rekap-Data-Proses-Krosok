@@ -11,11 +11,19 @@ import {
   ChevronRight,
   ShieldCheck,
   AppWindow,
-  Zap
+  Zap,
+  Scale
 } from 'lucide-react';
 import { UserRole } from '../types';
 
-export type NavTab = 'overview' | 'bulan' | 'jenis' | 'data_log' | 'new_entry' | 'switch_app';
+export type NavTab =
+  | 'overview'
+  | 'bulan'
+  | 'analisis_deviasi'
+  | 'jenis'
+  | 'data_log'
+  | 'new_entry'
+  | 'switch_app';
 
 interface SidebarProps {
   activeTab: NavTab;
@@ -61,6 +69,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Rekap per Bulan',
       desc: 'Tren & Tabel Bulanan',
       icon: Calendar
+    },
+    {
+      id: 'analisis_deviasi' as NavTab,
+      label: 'Analisis Deviasi & Acuan',
+      desc: 'Standar & Evaluasi Bulanan',
+      icon: Scale,
+      badge: 'SPC'
     },
     {
       id: 'jenis' as NavTab,
