@@ -57,7 +57,7 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records, dhpItems = []
       if (d.matchedRow) {
         byRow.set(d.matchedRow, d);
       }
-      const k1 = `${d.tanggal}|${(d.jenisKrosokMaster || d.jenisTembakau).toLowerCase()}|${d.baku.toFixed(1)}`;
+      const k1 = `${d.tanggal}|${d.jenisTembakau.toLowerCase()}|${d.baku.toFixed(1)}`;
       byKey.set(k1, d);
     });
 

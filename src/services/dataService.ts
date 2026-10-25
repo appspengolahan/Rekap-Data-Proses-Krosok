@@ -215,30 +215,296 @@ export async function fetchFromGviz(spreadsheetId: string, sheetName: string): P
   }
 }
 
-/** Fetch data from GAS endpoint if exposed as headless JSON */
-export async function fetchFromGAS(gasUrl: string): Promise<KrosokRecord[]> {
+/** Normalize a raw record from GAS or Gviz into a clean KrosokRecord */
+function normalizeKrosokRecord(
+  raw: any,
+  fallbackDetail?: Partial<KrosokRecord>
+): KrosokRecord | null {
+  const baku = round2(Number(raw.baku) || 0);
+  const hasil = round2(Number(raw.hasil) || 0);
+  const tanggal = String(raw.tanggal || '').trim();
+  if (!tanggal || baku <= 0 || hasil <= 0) return null;
+
+  let bulan = String(raw.bulan || '').trim();
+  let tahun = String(raw.tahun || '').trim();
+  let tanggalDisplay = String(raw.tanggalDisplay || '').trim();
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) {
+    const [yStr, mStr, dStr] = tanggal.split('-');
+    const mIdx = parseInt(mStr, 10) - 1;
+    const dNum = parseInt(dStr, 10);
+    if (!bulan || !MONTH_ORDER.includes(bulan)) {
+      bulan = MONTH_ORDER[mIdx] || 'Oktober';
+    }
+    if (!tahun || !/^\d{4}$/.test(tahun)) {
+      tahun = yStr;
+    }
+    if (!tanggalDisplay) {
+      tanggalDisplay = `${dNum} ${bulan} ${tahun}`;
+    }
+  }
+
+  const jenisKrosok = String(
+    raw.jenisKrosok || fallbackDetail?.jenisKrosok || ''
+  ).trim();
+  if (!jenisKrosok) return null;
+
+  const rawProses = String(raw.jenisProses || '').trim();
+  const jenisProses =
+    rawProses && rawProses !== 'Lainnya'
+      ? rawProses
+      : fallbackDetail?.jenisProses || 'SKT';
+
+  const susutKg = round2(baku - hasil);
+  const susutPct = round2((susutKg / baku) * 100);
+  const gagangKg = round2(
+    Number(fallbackDetail?.gagangKg ?? raw.gagangKg ?? 0) || 0
+  );
+  const airKg = round2(Number(fallbackDetail?.airKg ?? raw.airKg ?? 0) || 0);
+  const rawDebu = Number(
+    fallbackDetail?.debuKg ??
+      raw.debuKg ??
+      Math.max(0, (Number(raw.debuAirKg) || 0) - airKg)
+  );
+  const debuKg = round2(Math.max(0, rawDebu || 0));
+  const debuAirKg = round2(
+    Math.max(0, airKg + debuKg, Number(raw.debuAirKg) || 0)
+  );
+
+  return {
+    srcRow: Number(raw.srcRow) || fallbackDetail?.srcRow || 0,
+    tanggal,
+    tanggalDisplay: tanggalDisplay || tanggal,
+    bulan,
+    tahun,
+    jenisPerlakuan:
+      fallbackDetail?.jenisPerlakuan ||
+      (raw.jenisPerlakuan ? String(raw.jenisPerlakuan).trim() : `${jenisKrosok} ${jenisProses}`),
+    jenisKrosok,
+    jenisProses,
+    baku,
+    hasil,
+    susutKg,
+    susutPct,
+    gagangKg,
+    gagangPct: round2((gagangKg / baku) * 100),
+    airKg,
+    debuKg,
+    debuAirKg,
+    debuAirPct: round2((debuAirKg / baku) * 100)
+  };
+}
+
+/** Fetch data from GAS endpoint (reads full unfiltered REKAP SUSUT KROSOK sheet) */
+export async function fetchFromGAS(
+  gasUrl: string,
+  referenceRecords: KrosokRecord[] = []
+): Promise<KrosokRecord[]> {
   if (!gasUrl || !gasUrl.startsWith('http')) {
     return [];
   }
   try {
-    const urlWithAction = gasUrl.includes('?') ? `${gasUrl}&action=readAll` : `${gasUrl}?action=readAll`;
+    const urlWithAction = gasUrl.includes('?')
+      ? `${gasUrl}&action=readAll`
+      : `${gasUrl}?action=readAll`;
     const response = await fetch(urlWithAction, { redirect: 'follow' });
     if (!response.ok) {
       console.warn(`GAS Endpoint notice (Status: ${response.status})`);
       return [];
     }
     const data = await response.json();
-    if (Array.isArray(data)) {
-      return data;
+    const rawList: any[] = Array.isArray(data)
+      ? data
+      : data && Array.isArray(data.records)
+      ? data.records
+      : [];
+    if (rawList.length === 0) return [];
+
+    // Isolate the authoritative primary sheet block if GAS iterated across multiple tabs
+    const blocks: any[][] = [];
+    let currentBlock: any[] = [];
+    for (let i = 0; i < rawList.length; i++) {
+      if (
+        i > 0 &&
+        Number(rawList[i].srcRow) <= Number(rawList[i - 1].srcRow)
+      ) {
+        blocks.push(currentBlock);
+        currentBlock = [];
+      }
+      currentBlock.push(rawList[i]);
     }
-    if (data && data.records && Array.isArray(data.records)) {
-      return data.records;
+    if (currentBlock.length > 0) blocks.push(currentBlock);
+
+    // Choose the largest contiguous sheet block (REKAP SUSUT KROSOK)
+    const mainBlock = blocks.reduce(
+      (best, cand) => (cand.length >= best.length ? cand : best),
+      blocks[0]
+    );
+
+    const refMap = new Map<string, KrosokRecord>();
+    referenceRecords.forEach((r) => {
+      refMap.set(`${r.tanggal}|${r.baku.toFixed(1)}|${r.jenisKrosok}`, r);
+      refMap.set(`${r.tanggal}|${r.baku.toFixed(1)}`, r);
+    });
+
+    const normalized: KrosokRecord[] = [];
+    for (const row of mainBlock) {
+      const bKey1 = `${row.tanggal}|${Number(row.baku || 0).toFixed(1)}|${String(row.jenisKrosok || '').trim()}`;
+      const bKey2 = `${row.tanggal}|${Number(row.baku || 0).toFixed(1)}`;
+      const fallback = refMap.get(bKey1) || refMap.get(bKey2);
+      const clean = normalizeKrosokRecord(row, fallback);
+      if (clean) normalized.push(clean);
     }
-    return [];
+
+    return normalized;
   } catch (err) {
     console.warn('fetchFromGAS network notice (using offline/cached records):', err);
     return [];
   }
+}
+
+/**
+ * Fetches full unfiltered REKAP SUSUT KROSOK data by combining GAS (unfiltered full history)
+ * with Gviz (exact visible detail columns), preventing active Google Sheet filters from
+ * truncating historical months (such as Agustus 2026).
+ */
+export async function fetchUnifiedRekapRecords(
+  config: GASConfig,
+  existingRecords: KrosokRecord[] = []
+): Promise<KrosokRecord[]> {
+  const baselineRef =
+    existingRecords.length >= INITIAL_SEED_RECORDS.length
+      ? existingRecords
+      : INITIAL_SEED_RECORDS;
+
+  const [gvizRows, gasRows] = await Promise.all([
+    fetchFromGviz(config.spreadsheetId, config.sheetName),
+    fetchFromGAS(config.gasUrl, baselineRef)
+  ]);
+
+  // Build detail lookup from Gviz (carries exact airKg, debuKg, gagangKg, jenisPerlakuan on visible rows)
+  const gvizMap = new Map<string, KrosokRecord>();
+  gvizRows.forEach((r) => {
+    gvizMap.set(`${r.tanggal}|${r.baku.toFixed(1)}|${r.jenisKrosok.toLowerCase()}`, r);
+  });
+
+  if (gasRows.length > 0 && gasRows.length >= gvizRows.length) {
+    return gasRows.map((r) => {
+      const gMatch = gvizMap.get(
+        `${r.tanggal}|${r.baku.toFixed(1)}|${r.jenisKrosok.toLowerCase()}`
+      );
+      if (!gMatch) return r;
+      return {
+        ...r,
+        hasil: gMatch.hasil,
+        susutKg: gMatch.susutKg,
+        susutPct: gMatch.susutPct,
+        jenisPerlakuan: gMatch.jenisPerlakuan || r.jenisPerlakuan,
+        gagangKg: gMatch.gagangKg,
+        gagangPct: gMatch.gagangPct,
+        airKg: gMatch.airKg,
+        debuKg: gMatch.debuKg,
+        debuAirKg: gMatch.debuAirKg,
+        debuAirPct: gMatch.debuAirPct
+      };
+    });
+  }
+
+  // If GAS was unreachable and Gviz returned only a filtered subset (e.g. Sept-Oct filter active),
+  // merge Gviz updates into baselineRef instead of wiping out unfiltered historical months!
+  if (gvizRows.length > 0 && gvizRows.length < baselineRef.length * 0.6) {
+    const mergedMap = new Map<string, KrosokRecord>();
+    baselineRef.forEach((r) => {
+      mergedMap.set(`${r.tanggal}|${r.baku.toFixed(1)}|${r.jenisKrosok.toLowerCase()}`, r);
+    });
+    gvizRows.forEach((r) => {
+      mergedMap.set(`${r.tanggal}|${r.baku.toFixed(1)}|${r.jenisKrosok.toLowerCase()}`, r);
+    });
+    return Array.from(mergedMap.values()).sort((a, b) =>
+      a.tanggal !== b.tanggal ? a.tanggal.localeCompare(b.tanggal) : a.srcRow - b.srcRow
+    );
+  }
+
+  return gvizRows;
+}
+
+/**
+ * Combines Rekap Proses Krosok with completed live DHP Krosok batches (hasil > 0)
+ * as a unified Single Source of Truth (excluding unfinished hasil == 0 batches).
+ */
+export function mergeRekapWithCompletedDhp(
+  rekapRecords: KrosokRecord[],
+  dhpItems: DhpKrosokItem[]
+): KrosokRecord[] {
+  if (!dhpItems || dhpItems.length === 0) return rekapRecords;
+
+  const updatedRekap = rekapRecords.map((r) => {
+    const dhpUpdate = dhpItems.find(
+      (d) =>
+        d.hasil > 0 &&
+        d.needsUpdateInRekap &&
+        (d.matchedRow === r.srcRow ||
+          (d.tanggal === r.tanggal &&
+            Math.abs(d.baku - r.baku) < 0.2 &&
+            d.jenisTembakau.toLowerCase() === r.jenisKrosok.toLowerCase()))
+    );
+    if (!dhpUpdate) return r;
+    const susutKg = round2(dhpUpdate.baku - dhpUpdate.hasil);
+    const debuAirKg = round2((dhpUpdate.airKg || 0) + (dhpUpdate.debuKg || 0));
+    return {
+      ...r,
+      hasil: dhpUpdate.hasil,
+      susutKg,
+      susutPct: round2((susutKg / dhpUpdate.baku) * 100),
+      gagangKg: dhpUpdate.gagangKg || 0,
+      gagangPct: round2(((dhpUpdate.gagangKg || 0) / dhpUpdate.baku) * 100),
+      airKg: dhpUpdate.airKg || 0,
+      debuKg: dhpUpdate.debuKg || 0,
+      debuAirKg,
+      debuAirPct: round2((debuAirKg / dhpUpdate.baku) * 100)
+    };
+  });
+
+  const existingKeys = new Set(
+    updatedRekap.map(
+      (r) => `${r.tanggal}|${r.jenisKrosok.toLowerCase()}|${r.baku.toFixed(1)}`
+    )
+  );
+
+  const newCompletedFromDhp: KrosokRecord[] = [];
+  dhpItems.forEach((d, idx) => {
+    if (!d.hasil || d.hasil <= 0 || d.isMatchedInRekap) return;
+    const k = `${d.tanggal}|${d.jenisTembakau.toLowerCase()}|${d.baku.toFixed(1)}`;
+    if (existingKeys.has(k)) return;
+    existingKeys.add(k);
+
+    const susutKg = round2(d.baku - d.hasil);
+    const debuAirKg = round2((d.airKg || 0) + (d.debuKg || 0));
+    newCompletedFromDhp.push({
+      srcRow: 10000 + idx,
+      tanggal: d.tanggal,
+      tanggalDisplay: d.tanggalDisplay,
+      bulan: d.bulan,
+      tahun: d.tahun,
+      jenisPerlakuan: `${d.jenisTembakau} ${d.jalurProses}`,
+      jenisKrosok: d.jenisTembakau,
+      jenisProses: d.jalurProses,
+      baku: d.baku,
+      hasil: d.hasil,
+      susutKg,
+      susutPct: round2((susutKg / d.baku) * 100),
+      gagangKg: d.gagangKg || 0,
+      gagangPct: round2(((d.gagangKg || 0) / d.baku) * 100),
+      airKg: d.airKg || 0,
+      debuKg: d.debuKg || 0,
+      debuAirKg,
+      debuAirPct: round2((debuAirKg / d.baku) * 100)
+    });
+  });
+
+  return newCompletedFromDhp.length > 0
+    ? [...updatedRekap, ...newCompletedFromDhp]
+    : updatedRekap;
 }
 
 /** Fetch and parse DHP Krosok items from Sheet DHP Krosok (Tab: INTEGRASI DATA) */
@@ -251,24 +517,41 @@ export async function fetchDhpKrosokRecords(
   try {
     const encSheet = encodeURIComponent(dhpSheetName);
     const url = `https://docs.google.com/spreadsheets/d/${dhpSpreadsheetId}/gviz/tq?tqx=out:json&sheet=${encSheet}`;
-    
+
     const response = await fetch(url);
     if (!response.ok) {
       console.warn(`DHP Sheet request notice (Status: ${response.status})`);
       return getCachedDhpItems();
     }
-    
+
     const text = await response.text();
     const start = text.indexOf('{');
     const end = text.lastIndexOf('}');
     if (start === -1 || end === -1) {
       return getCachedDhpItems();
     }
-    
+
     const json = JSON.parse(text.substring(start, end + 1));
     const rows = json.table?.rows || [];
     const items: DhpKrosokItem[] = [];
 
+    // First pass: Build independent master Stock Code lookup from Columns Q & R (indices 16 & 17)
+    // Note: Columns Q & R in INTEGRASI DATA are an alphabetical master lookup table, NOT aligned by row index!
+    const stockCodeByVariant = new Map<string, { kodeStock?: string; masterName: string }>();
+    for (let i = 0; i < rows.length; i++) {
+      const c = rows[i].c;
+      if (!c) continue;
+      const mName = c[17]?.v ? String(c[17].v).trim() : '';
+      const mStock = c[16]?.v ? String(c[16].v).trim() : undefined;
+      if (mName && mName.toUpperCase() !== 'JENIS KROSOK') {
+        stockCodeByVariant.set(mName.toLowerCase(), {
+          kodeStock: mStock,
+          masterName: mName
+        });
+      }
+    }
+
+    // Second pass: Parse real DHP transaction rows (Columns C..M)
     for (let i = 0; i < rows.length; i++) {
       const c = rows[i].c;
       if (!c || c.length < 5) continue;
@@ -277,62 +560,89 @@ export async function fetchDhpKrosokRecords(
       const rawTembakau = c[3]?.v;
       const rawBaku = c[4]?.v;
       const rawWaktu = c[12]?.v ? String(c[12]?.v).trim() : '';
-      const rawKodeStock = c[16]?.v ? String(c[16]?.v).trim() : undefined;
-      const rawKrosokMaster = c[17]?.v ? String(c[17]?.v).trim() : undefined;
 
-      // Filter: valid batch must have tobacco name and baku > 0
-      if (rawTembakau && typeof rawBaku === 'number' && rawBaku > 0) {
+      // Filter: valid batch must have tobacco name (not header) and baku > 0
+      if (
+        rawTembakau &&
+        String(rawTembakau).trim().toUpperCase() !== 'JENIS TEMBAKAU' &&
+        typeof rawBaku === 'number' &&
+        rawBaku > 0
+      ) {
         const parsedDate = parseGvizDate(rawTgl);
         const baku = round2(rawBaku);
         const gagangKg = typeof c[5]?.v === 'number' ? round2(c[5]?.v) : 0;
         const airKg = typeof c[6]?.v === 'number' ? round2(c[6]?.v) : 0;
         const debuKg = typeof c[7]?.v === 'number' ? round2(c[7]?.v) : 0;
-        
-        // Kolom I (Index 8) adalah HASIL PROSES riil di DHP
-        const rawHasil = typeof c[8]?.v === 'number' ? c[8]?.v : (typeof c[8]?.v === 'string' ? parseFloat(c[8]?.v.replace(',', '.')) : NaN);
-        const rawSusutKg = typeof c[9]?.v === 'number' ? c[9]?.v : (typeof c[9]?.v === 'string' ? parseFloat(c[9]?.v.replace(',', '.')) : NaN);
 
-        // 1. Tentukan Susut (Kg) & Netto Hasil (Kg) secara akurat
+        // Kolom I (Index 8) adalah HASIL PROSES riil di DHP (bernilai boolean `false` jika belum selesai ditimbang)
+        const cellHasil = c[8]?.v;
+        const rawHasil =
+          typeof cellHasil === 'number'
+            ? cellHasil
+            : typeof cellHasil === 'string'
+            ? parseFloat(cellHasil.replace(',', '.'))
+            : NaN;
+        const rawSusutKg =
+          typeof c[9]?.v === 'number'
+            ? c[9]?.v
+            : typeof c[9]?.v === 'string'
+            ? parseFloat(c[9]?.v.replace(',', '.'))
+            : NaN;
+
         let susutKg = 0;
         let hasil = 0;
 
-        if (!isNaN(rawSusutKg)) {
-          // Jika Kolom J (Susut Kg) ada di DHP
-          susutKg = round2(rawSusutKg);
-          hasil = !isNaN(rawHasil) && rawHasil > 0 ? round2(rawHasil) : round2(baku - susutKg);
-        } else if (!isNaN(rawHasil) && rawHasil > 0) {
-          // Jika hanya Kolom I (Hasil) yang ada di DHP
+        if (!isNaN(rawHasil) && rawHasil > 0) {
+          // Batch sudah ditimbang hasil prosesnya secara riil
           hasil = round2(rawHasil);
           susutKg = round2(baku - hasil);
-        } else if ((gagangKg + airKg + debuKg) > 0) {
-          // Jika pecahan proses tersedia
-          susutKg = round2(gagangKg + airKg + debuKg);
+        } else if (
+          cellHasil !== false &&
+          !isNaN(rawSusutKg) &&
+          Math.abs(rawSusutKg - baku) > 0.05 &&
+          Math.abs(rawSusutKg) < baku * 0.5
+        ) {
+          // Jika susut riil parsial terisi valid (bukan 100% akibat rumus E - FALSE)
+          susutKg = round2(rawSusutKg);
           hasil = round2(baku - susutKg);
         } else {
-          hasil = baku;
+          // Batch masih dalam proses pengolahan (Hasil = FALSE / 0): jangan anggap susut 100%!
+          hasil = 0;
           susutKg = 0;
         }
 
-        // 2. RUMUS SUSUT (%) PRESISI: (Susut Kg / Netto Baku) * 100%
-        // Sesuai dengan rumus asli di Kolom K Sheet Rekap (=J... / H...)
-        const susutPct = baku > 0 ? round2((susutKg / baku) * 100) : 0;
+        const susutPct = hasil > 0 && baku > 0 ? round2((susutKg / baku) * 100) : 0;
 
         const tembakauStr = String(rawTembakau).trim();
-        const jalurProses: 'SKT' | 'SKM' = tembakauStr.toUpperCase().includes('SKM') ? 'SKM' : 'SKT';
+        const jalurProses: 'SKT' | 'SKM' = tembakauStr.toUpperCase().includes('SKM')
+          ? 'SKM'
+          : 'SKT';
+
+        // Match stock code from independent master table by exact tobacco name
+        const cleanVariantLookup = tembakauStr
+          .replace(/\b(skt|skm)\b/gi, '')
+          .trim()
+          .toLowerCase();
+        const masterInfo =
+          stockCodeByVariant.get(tembakauStr.toLowerCase()) ||
+          stockCodeByVariant.get(cleanVariantLookup);
 
         // Check if matched in rekap records
         const match = rekapRecords.find((r) => {
           const dateMatch = r.tanggal === parsedDate.iso;
           const tembakauMatch =
             r.jenisKrosok.toLowerCase() === tembakauStr.toLowerCase() ||
-            (r.jenisPerlakuan && r.jenisPerlakuan.toLowerCase().includes(tembakauStr.toLowerCase())) ||
+            (r.jenisPerlakuan &&
+              r.jenisPerlakuan.toLowerCase().includes(tembakauStr.toLowerCase())) ||
             tembakauStr.toLowerCase().includes(r.jenisKrosok.toLowerCase());
           const bakuMatch = Math.abs(r.baku - baku) < 0.2;
           return dateMatch && tembakauMatch && bakuMatch;
         });
 
         const isMatched = Boolean(match);
-        const needsUpdate = Boolean(match && hasil > 0 && Math.abs(match.hasil - hasil) >= 0.5);
+        const needsUpdate = Boolean(
+          match && hasil > 0 && Math.abs(match.hasil - hasil) >= 0.5
+        );
 
         items.push({
           id: `dhp_${i + 1}_${parsedDate.iso}_${baku}`,
@@ -342,8 +652,8 @@ export async function fetchDhpKrosokRecords(
           bulan: parsedDate.bulan,
           tahun: parsedDate.tahun,
           jenisTembakau: tembakauStr,
-          jenisKrosokMaster: rawKrosokMaster,
-          kodeStock: rawKodeStock,
+          jenisKrosokMaster: masterInfo?.masterName,
+          kodeStock: masterInfo?.kodeStock,
           waktu: rawWaktu,
           baku,
           hasil,
@@ -361,32 +671,44 @@ export async function fetchDhpKrosokRecords(
       }
     }
 
-    if (items.length > 0) {
-      setCachedDhpItems(items);
-    }
-    return items.length > 0 ? items : getCachedDhpItems();
+    // Always store and return the exact live state of Sheet DHP Krosok (even if 0 active batches)
+    setCachedDhpItems(items);
+    return items;
   } catch (err) {
     console.warn('fetchDhpKrosokRecords network notice (using cached):', err);
     return getCachedDhpItems();
   }
 }
 
-/** Get cached DHP items from localStorage */
+/** Get cached DHP items from localStorage (Zero dummy/hardcoded fallback) */
 export function getCachedDhpItems(): DhpKrosokItem[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.DHP_CACHE);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed.map((item: DhpKrosokItem) => {
           const baku = Number(item.baku) || 0;
           const hasil = Number(item.hasil) || 0;
-          // Rumus presisi: Susut Kg = Netto Baku - Netto Hasil
-          const susutKg = hasil > 0 ? round2(baku - hasil) : (Number(item.susutKg) || 0);
-          // Rumus presisi: Susut % = (Susut Kg / Netto Baku) * 100%
-          const susutPct = baku > 0 ? round2((susutKg / baku) * 100) : 0;
+          const rawSusut = Number(item.susutKg) || 0;
+          // Guard against legacy 100% shrinkage on unweighed batches
+          const isUnfinished = hasil <= 0 && Math.abs(rawSusut - baku) < 0.05;
+          const susutKg = hasil > 0 ? round2(baku - hasil) : isUnfinished ? 0 : round2(rawSusut);
+          const susutPct = hasil > 0 && baku > 0 ? round2((susutKg / baku) * 100) : 0;
+
+          // Sanitize any legacy misaligned jenisKrosokMaster from old column 17 index bug
+          const validMaster =
+            item.jenisKrosokMaster &&
+            item.jenisTembakau &&
+            item.jenisKrosokMaster.toLowerCase().includes(
+              item.jenisTembakau.replace(/\b(skt|skm)\b/gi, '').trim().toLowerCase()
+            )
+              ? item.jenisKrosokMaster
+              : undefined;
+
           return {
             ...item,
+            jenisKrosokMaster: validMaster,
             baku,
             hasil,
             susutKg,
@@ -398,146 +720,7 @@ export function getCachedDhpItems(): DhpKrosokItem[] {
   } catch (e) {
     console.warn('Error reading cached DHP items:', e);
   }
-  return [
-    {
-      id: 'dhp_7_2026-10-20_969.4',
-      rowIdx: 7,
-      tanggal: '2026-10-20',
-      tanggalDisplay: '20 Oktober 2026',
-      bulan: 'Oktober',
-      tahun: '2026',
-      jenisTembakau: 'Lombok 2024 (BE) - 1',
-      waktu: '14:52 - 14:53',
-      baku: 969.4,
-      hasil: 968.6,
-      gagangKg: 0,
-      debuKg: 0,
-      susutKg: 0.8,
-      susutPct: 0.08,
-      jalurProses: 'SKT',
-      isMatchedInRekap: true,
-      matchedRow: 952
-    },
-    {
-      id: 'dhp_8_2026-10-20_272.4',
-      rowIdx: 8,
-      tanggal: '2026-10-20',
-      tanggalDisplay: '20 Oktober 2026',
-      bulan: 'Oktober',
-      tahun: '2026',
-      jenisTembakau: 'Lombok 2024 (FS) - 1',
-      kodeStock: '1.3.34.20A',
-      waktu: '14:53 - 14:53',
-      baku: 272.4,
-      hasil: 271.9,
-      gagangKg: 0,
-      debuKg: 0,
-      susutKg: 0.5,
-      susutPct: 0.18,
-      jalurProses: 'SKT',
-      isMatchedInRekap: true,
-      matchedRow: 953
-    },
-    {
-      id: 'dhp_9_2026-10-20_804.0',
-      rowIdx: 9,
-      tanggal: '2026-10-20',
-      tanggalDisplay: '20 Oktober 2026',
-      bulan: 'Oktober',
-      tahun: '2026',
-      jenisTembakau: 'Amerika 2025 (BO1)',
-      kodeStock: '1.3.66.1',
-      waktu: '14:54 - 14:54',
-      baku: 804.0,
-      hasil: 804.1,
-      gagangKg: 0,
-      debuKg: 0,
-      susutKg: -0.1,
-      susutPct: -0.01,
-      jalurProses: 'SKT',
-      isMatchedInRekap: true,
-      matchedRow: 954
-    },
-    {
-      id: 'dhp_10_2026-10-20_356.4',
-      rowIdx: 10,
-      tanggal: '2026-10-20',
-      tanggalDisplay: '20 Oktober 2026',
-      bulan: 'Oktober',
-      tahun: '2026',
-      jenisTembakau: 'Kasturi 2023 (ST)',
-      kodeStock: '1.3.69.01T',
-      waktu: '14:54 - 14:55',
-      baku: 356.4,
-      hasil: 355.4,
-      gagangKg: 0,
-      debuKg: 0,
-      susutKg: 1.0,
-      susutPct: 0.28,
-      jalurProses: 'SKT',
-      isMatchedInRekap: true,
-      matchedRow: 955
-    },
-    {
-      id: 'dhp_11_2026-10-20_91.9',
-      rowIdx: 11,
-      tanggal: '2026-10-20',
-      tanggalDisplay: '20 Oktober 2026',
-      bulan: 'Oktober',
-      tahun: '2026',
-      jenisTembakau: 'Janturan Jombang 2024 (MYN)',
-      kodeStock: '1.3.10.18T',
-      waktu: '14:20 - 14:20',
-      baku: 91.9,
-      hasil: 91.6,
-      gagangKg: 0,
-      debuKg: 0,
-      susutKg: 0.3,
-      susutPct: 0.33,
-      jalurProses: 'SKT',
-      isMatchedInRekap: true,
-      matchedRow: 956
-    },
-    {
-      id: 'dhp_12_2026-10-20_161.3',
-      rowIdx: 12,
-      tanggal: '2026-10-20',
-      tanggalDisplay: '20 Oktober 2026',
-      bulan: 'Oktober',
-      tahun: '2026',
-      jenisTembakau: 'Hang Boyolali 2024 (FS)',
-      kodeStock: '1.3.10.17',
-      waktu: '14:20 - 14:20',
-      baku: 161.3,
-      hasil: 161.1,
-      gagangKg: 0,
-      debuKg: 0,
-      susutKg: 0.2,
-      susutPct: 0.12,
-      jalurProses: 'SKT',
-      isMatchedInRekap: true,
-      matchedRow: 957
-    },
-    {
-      id: 'dhp_13_2026-10-20_468.1',
-      rowIdx: 13,
-      tanggal: '2026-10-20',
-      tanggalDisplay: '20 Oktober 2026',
-      bulan: 'Oktober',
-      tahun: '2026',
-      jenisTembakau: 'Krs. Garut 2025 (MYN)',
-      waktu: '14:21 - 14:21',
-      baku: 468.1,
-      hasil: 468.9,
-      gagangKg: 0,
-      debuKg: 0,
-      susutKg: -0.8,
-      susutPct: -0.17,
-      jalurProses: 'SKT',
-      isMatchedInRekap: true,
-      matchedRow: 958
-    }
-  ];
+  return [];
 }
 
 /** Save DHP items to localStorage */
@@ -549,13 +732,28 @@ export function setCachedDhpItems(items: DhpKrosokItem[]): void {
   }
 }
 
-/** Load records from localStorage cache or fallback to initial seed */
+/** Load records from localStorage cache or fallback to real Rekap snapshot */
 export function getCachedRecords(): KrosokRecord[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.RAW_DATA);
     if (raw) {
-      const parsed = JSON.parse(raw);
+      const parsed: KrosokRecord[] = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
+        // Auto-heal if localStorage previously cached a partial filtered Gviz response (e.g. Sept-Oct only)
+        if (parsed.length < INITIAL_SEED_RECORDS.length * 0.6) {
+          const mergedMap = new Map<string, KrosokRecord>();
+          INITIAL_SEED_RECORDS.forEach((r) => {
+            mergedMap.set(`${r.tanggal}|${r.baku.toFixed(1)}|${r.jenisKrosok.toLowerCase()}`, r);
+          });
+          parsed.forEach((r) => {
+            if (r.jenisKrosok) {
+              mergedMap.set(`${r.tanggal}|${r.baku.toFixed(1)}|${r.jenisKrosok.toLowerCase()}`, r);
+            }
+          });
+          return Array.from(mergedMap.values()).sort((a, b) =>
+            a.tanggal !== b.tanggal ? a.tanggal.localeCompare(b.tanggal) : a.srcRow - b.srcRow
+          );
+        }
         return parsed;
       }
     }

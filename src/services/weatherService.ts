@@ -165,24 +165,30 @@ export function computeHygroIndex(
 export async function fetchFactoryWeather(
   locationOverride?: FactoryLocation,
   forceRefresh: boolean = false
-): Promise<FactoryWeatherData> {
+): Promise<FactoryWeatherData | null> {
   const loc = locationOverride || getSelectedFactoryLocation();
   const cacheKey = `${WEATHER_STORAGE_KEYS.CACHE_PREFIX}_${loc.id}`;
 
-  if (!forceRefresh) {
-    try {
-      const raw = localStorage.getItem(cacheKey);
-      if (raw) {
-        const cached: FactoryWeatherData = JSON.parse(raw);
+  let staleCache: FactoryWeatherData | null = null;
+  try {
+    const raw = localStorage.getItem(cacheKey);
+    if (raw) {
+      const cached: FactoryWeatherData = JSON.parse(raw);
+      staleCache = cached;
+      if (!forceRefresh) {
         const ageMinutes =
           (Date.now() - new Date(cached.fetchedAt).getTime()) / (1000 * 60);
-        if (ageMinutes < 15 && Array.isArray(cached.hourly)) {
+        if (
+          ageMinutes < 15 &&
+          Array.isArray(cached.hourly) &&
+          cached.hourly.length > 400
+        ) {
           return cached;
         }
       }
-    } catch {
-      // ignore cache parse errors
     }
+  } catch {
+    // ignore cache parse errors
   }
 
   try {
@@ -190,7 +196,7 @@ export async function fetchFactoryWeather(
       `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}` +
       `&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,precipitation,is_day` +
       `&hourly=temperature_2m,relative_humidity_2m,weather_code,precipitation` +
-      `&past_days=14&forecast_days=1&timezone=Asia%2FJakarta`;
+      `&past_days=31&forecast_days=3&timezone=Asia%2FJakarta`;
 
     const res = await fetch(url);
     if (!res.ok) {
@@ -198,11 +204,15 @@ export async function fetchFactoryWeather(
     }
 
     const json = await res.json();
-    const cur = json.current || {};
-    const temp = Number(cur.temperature_2m ?? 26.8);
-    const rh = Number(cur.relative_humidity_2m ?? 72);
-    const wCode = Number(cur.weather_code ?? 2);
-    const wind = Number(cur.wind_speed_10m ?? 5.4);
+    const cur = json.current;
+    if (!cur || typeof cur.temperature_2m !== 'number') {
+      throw new Error('Open-Meteo current payload incomplete');
+    }
+
+    const temp = Number(cur.temperature_2m);
+    const rh = Number(cur.relative_humidity_2m);
+    const wCode = Number(cur.weather_code ?? 0);
+    const wind = Number(cur.wind_speed_10m ?? 0);
     const precip = Number(cur.precipitation ?? 0);
     const isDay = cur.is_day === 1;
 
@@ -213,14 +223,20 @@ export async function fetchFactoryWeather(
     const hPrecips: number[] = json.hourly?.precipitation || [];
 
     const hourly: HourlyWeatherPoint[] = [];
+    const curTimeStr = String(cur.time || '').slice(0, 16);
+    const nowMs = curTimeStr ? new Date(`${curTimeStr}:00+07:00`).getTime() : Date.now();
+    const fourteenDaysAgoMs = nowMs - 14 * 24 * 60 * 60 * 1000;
+
     const rainyDaySet = new Set<string>();
-    let sumTemp = 0;
-    let sumRh = 0;
+    let sumTemp14d = 0;
+    let sumRh14d = 0;
+    let count14d = 0;
 
     for (let i = 0; i < times.length; i++) {
-      const tVal = Number(hTemps[i] ?? temp);
-      const rVal = Number(hRhs[i] ?? rh);
-      const cVal = Number(hCodes[i] ?? wCode);
+      if (typeof hTemps[i] !== 'number' || typeof hRhs[i] !== 'number') continue;
+      const tVal = Number(hTemps[i]);
+      const rVal = Number(hRhs[i]);
+      const cVal = Number(hCodes[i] ?? 0);
       const pVal = Number(hPrecips[i] ?? 0);
       hourly.push({
         timeIso: times[i],
@@ -230,15 +246,20 @@ export async function fetchFactoryWeather(
         precipitation: pVal,
         weatherDesc: decodeWeatherCode(cVal)
       });
-      sumTemp += tVal;
-      sumRh += rVal;
-      if (pVal >= 1.0 || isRainWeatherCode(cVal)) {
-        const dayStr = times[i].split('T')[0];
-        if (dayStr) rainyDaySet.add(dayStr);
+
+      const ptMs = new Date(`${times[i]}:00+07:00`).getTime();
+      if (!isNaN(ptMs) && ptMs >= fourteenDaysAgoMs && ptMs <= nowMs) {
+        sumTemp14d += tVal;
+        sumRh14d += rVal;
+        count14d++;
+        if (pVal >= 1.0 || isRainWeatherCode(cVal)) {
+          const dayStr = times[i].split('T')[0];
+          if (dayStr) rainyDaySet.add(dayStr);
+        }
       }
     }
 
-    const count = hourly.length || 1;
+    const denom = count14d || 1;
     const data: FactoryWeatherData = {
       location: loc,
       temperature: temp,
@@ -252,8 +273,8 @@ export async function fetchFactoryWeather(
       hygroIndex: computeHygroIndex(temp, rh, wCode, precip),
       hourly,
       rainyDaysLast14d: rainyDaySet.size,
-      avgHumidityLast14d: Math.round((sumRh / count) * 10) / 10,
-      avgTempLast14d: Math.round((sumTemp / count) * 10) / 10
+      avgHumidityLast14d: Math.round((sumRh14d / denom) * 10) / 10,
+      avgTempLast14d: Math.round((sumTemp14d / denom) * 10) / 10
     };
 
     try {
@@ -264,40 +285,26 @@ export async function fetchFactoryWeather(
 
     return data;
   } catch (err) {
-    console.warn('Weather API fallback notice (using Wagir microclimate baseline):', err);
-    const fallbackTemp = 26.8;
-    const fallbackRh = 73;
-    return {
-      location: loc,
-      temperature: fallbackTemp,
-      humidity: fallbackRh,
-      weatherCode: 2,
-      weatherDesc: 'Cerah Berawan (Estimasi Iklim Wagir)',
-      windSpeed: 5.8,
-      precipitation: 0,
-      isDay: true,
-      fetchedAt: new Date().toISOString(),
-      hygroIndex: computeHygroIndex(fallbackTemp, fallbackRh, 2, 0),
-      hourly: [],
-      rainyDaysLast14d: 4,
-      avgHumidityLast14d: 74.5,
-      avgTempLast14d: 25.9
-    };
+    console.warn('Weather API notice (returning last verified telemetry or null):', err);
+    return staleCache;
   }
 }
 
 /**
- * Matches exact processing hour from DHP `waktu` (e.g. "14:52 - 14:53" or "09:21 - 09:37")
- * against Open-Meteo hourly history for the batch date.
+ * Matches exact processing hour from DHP `waktu` (e.g. "14:52 - 14:53" or " - 9:34")
+ * strictly against real Open-Meteo hourly history/forecast for that exact batch date.
+ * Returns null if the batch date is outside the 34-day real telemetry window (zero synthetic data).
  */
 export function getBatchHourlyWeather(
   weatherData: FactoryWeatherData | null | undefined,
   tanggalIso: string,
   waktuStr?: string
 ): HourlyWeatherPoint | null {
-  if (!weatherData) return null;
+  if (!weatherData || !weatherData.hourly || weatherData.hourly.length === 0) {
+    return null;
+  }
 
-  let targetHour = 11; // default midday production hour if waktu not recorded
+  let targetHour = 11; // midday shift hour if waktu column only has date
   if (waktuStr) {
     const match = waktuStr.match(/(\d{1,2})[:.](\d{2})/);
     if (match) {
@@ -308,29 +315,6 @@ export function getBatchHourlyWeather(
   }
 
   const targetKey = `${tanggalIso}T${String(targetHour).padStart(2, '0')}:00`;
-  if (weatherData.hourly && weatherData.hourly.length > 0) {
-    const exact = weatherData.hourly.find((h) => h.timeIso === targetKey);
-    if (exact) return exact;
-
-    // Fallback to same hour on latest available day if batch date is outside 14-day window
-    const sameHourSuffix = `T${String(targetHour).padStart(2, '0')}:00`;
-    const recentSameHour = [...weatherData.hourly]
-      .reverse()
-      .find((h) => h.timeIso.endsWith(sameHourSuffix));
-    if (recentSameHour) {
-      return {
-        ...recentSameHour,
-        timeIso: targetKey
-      };
-    }
-  }
-
-  return {
-    timeIso: targetKey,
-    temperature: weatherData.temperature,
-    humidity: weatherData.humidity,
-    weatherCode: weatherData.weatherCode,
-    precipitation: weatherData.precipitation,
-    weatherDesc: weatherData.weatherDesc
-  };
+  const exact = weatherData.hourly.find((h) => h.timeIso === targetKey);
+  return exact || null;
 }

@@ -26,7 +26,7 @@ export const QUICK_TAG_OPTIONS: string[] = [
 ];
 
 const ACUAN_STORAGE_KEYS = {
-  STANDAR_LIST: 'krosok_standar_acuan_list_v1',
+  STANDAR_LIST: 'krosok_standar_acuan_list_v2',
   BASELINE_META: 'krosok_baseline_meta_v1',
   BATCH_NOTES: 'krosok_batch_field_notes_v1',
   SIGNATORIES: 'krosok_exec_signatories_v1'
@@ -368,16 +368,16 @@ export function findStandarForVariant(
     id: 'default_fallback',
     jenisKrosok: jenisKrosok || 'Umum',
     jenisProses: jalurProses || 'SKT',
-    standarSusutPct: 0.08,
+    standarSusutPct: 0,
     toleransiWaspadaPct: 0.15,
     toleransiOosPct: 0.30,
-    periodeAcuan: 'Standar Umum',
+    periodeAcuan: 'Belum Ada Riwayat Periode Dasar',
     totalBakuKg: 0,
     batchCount: 0,
     avgGagangPct: 0,
     avgDebuAirPct: 0,
-    avgBatchBakuKg: 500,
-    keterangan: 'Standar toleransi umum pengolahan krosok',
+    avgBatchBakuKg: 0,
+    keterangan: 'Varian baru (belum terdapat riwayat batch pada periode dasar)',
     updatedAt: new Date().toISOString().split('T')[0]
   };
 }
@@ -475,11 +475,18 @@ export function diagnoseKrosokDeviation(params: {
     };
   }
 
-  if (bakuKg > 0 && (bakuKg < 220 || (avgBatchRefKg > 350 && bakuKg < avgBatchRefKg * 0.45))) {
+  if (
+    bakuKg > 0 &&
+    ((avgBatchRefKg > 350 && bakuKg < avgBatchRefKg * 0.45) ||
+      (avgBatchRefKg === 0 && bakuKg < 150))
+  ) {
     return {
       status,
       faktorDominan: tags[0] || 'Efek Kapasitas Batch Kecil',
-      penjelasan: `Volume olah kecil (${bakuKg.toFixed(1)} Kg dibanding rata-rata referensi ${avgBatchRefKg.toFixed(0)} Kg) membuat sisa tertahan mekanis di jalur ${jalurProses} menaikkan rasio % susut (+${delta.toFixed(2)}%).${tagNote}`
+      penjelasan:
+        avgBatchRefKg > 0
+          ? `Volume olah kecil (${bakuKg.toFixed(1)} Kg dibanding rata-rata referensi ${avgBatchRefKg.toFixed(0)} Kg) membuat sisa tertahan mekanis di jalur ${jalurProses} menaikkan rasio % susut (+${delta.toFixed(2)}%).${tagNote}`
+          : `Volume olah kecil (${bakuKg.toFixed(1)} Kg) meningkatkan rasio sisa tertahan mekanis di jalur ${jalurProses} (+${delta.toFixed(2)}%).${tagNote}`
     };
   }
 
@@ -507,7 +514,8 @@ export function evaluateDhpBatch(
   batchNotes: Record<string, BatchFieldNote>,
   weatherData?: FactoryWeatherData | null
 ): TacticalBatchEvaluation {
-  const variantName = item.jenisKrosokMaster || item.jenisTembakau;
+  // Always use item.jenisTembakau (DHP Transaction Column D) as the exact batch variant truth
+  const variantName = item.jenisTembakau;
   const standar = findStandarForVariant(variantName, item.jalurProses, standarList);
   const batchKey = makeBatchNoteKey(item.tanggal, variantName, item.baku);
   const note = batchNotes[batchKey];
@@ -532,14 +540,17 @@ export function evaluateDhpBatch(
       debuPct: 0,
       uapAirKg: 0,
       uapAirPct: 0,
-      isSmallBatch: item.baku > 0 && item.baku < 220,
-      avgBatchRefKg: standar.avgBatchBakuKg || 500,
+      isSmallBatch:
+        item.baku > 0 &&
+        standar.avgBatchBakuKg > 350 &&
+        item.baku < standar.avgBatchBakuKg * 0.45,
+      avgBatchRefKg: standar.avgBatchBakuKg || 0,
       weatherAtBatch,
       tags,
       catatan,
       diagnosaUtama: 'Menunggu Penimbangan Hasil',
       penjelasanKilat:
-        'Batch sedang dalam proses pengolahan. Perbandingan deviasi otomatis aktif setelah bobot Netto Hasil terinput di DHP.'
+        'Batch sedang dalam proses pengolahan di lapangan. Perbandingan deviasi susut akan dihitung otomatis segera setelah bobot Netto Hasil selesai ditimbang di Sheet DHP.'
     };
   }
 
@@ -567,7 +578,7 @@ export function evaluateDhpBatch(
     debuPct,
     uapAirPct,
     bakuKg: baku,
-    avgBatchRefKg: standar.avgBatchBakuKg || 500,
+    avgBatchRefKg: standar.avgBatchBakuKg || 0,
     jalurProses: item.jalurProses,
     humidity: weatherAtBatch?.humidity,
     temperature: weatherAtBatch?.temperature,
@@ -591,8 +602,9 @@ export function evaluateDhpBatch(
     uapAirPct,
     isSmallBatch:
       baku > 0 &&
-      (baku < 220 || (standar.avgBatchBakuKg > 350 && baku < standar.avgBatchBakuKg * 0.45)),
-    avgBatchRefKg: standar.avgBatchBakuKg || 500,
+      standar.avgBatchBakuKg > 350 &&
+      baku < standar.avgBatchBakuKg * 0.45,
+    avgBatchRefKg: standar.avgBatchBakuKg || 0,
     weatherAtBatch,
     tags,
     catatan,
@@ -793,7 +805,7 @@ export function computeEvaluasiBulananKrosok(params: {
       debuPct,
       uapAirPct,
       bakuKg: avgBatchInEval,
-      avgBatchRefKg: standar.avgBatchBakuKg || 500,
+      avgBatchRefKg: standar.avgBatchBakuKg || 0,
       jalurProses: g.jenisProses,
       humidity: weatherData?.humidity,
       temperature: weatherData?.temperature,

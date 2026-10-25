@@ -152,8 +152,7 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
       setTagEditorTarget(null);
       return;
     }
-    const variantName =
-      tagEditorTarget.item.jenisKrosokMaster || tagEditorTarget.item.jenisTembakau;
+    const variantName = tagEditorTarget.item.jenisTembakau;
     onSaveBatchNote({
       batchKey: tagEditorTarget.evalData.batchKey,
       tanggal: tagEditorTarget.item.tanggal,
@@ -166,17 +165,21 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
     setTagEditorTarget(null);
   };
 
-  const needUpdateCount = dhpItems.filter((i) => i.needsUpdateInRekap).length;
+  const completedItems = dhpItems.filter((i) => i.hasil > 0);
+  const inProgressCount = dhpItems.length - completedItems.length;
+  const needUpdateCount = completedItems.filter((i) => i.needsUpdateInRekap).length;
   const matchedCount = dhpItems.filter((i) => i.isMatchedInRekap && !i.needsUpdateInRekap).length;
-  const newCount = dhpItems.filter((i) => !i.isMatchedInRekap).length;
+  const newCount = completedItems.filter((i) => !i.isMatchedInRekap).length;
   const totalBaku = dhpItems.reduce((acc, i) => acc + i.baku, 0);
-  const totalHasil = dhpItems.reduce((acc, i) => acc + (i.hasil || 0), 0);
-  const verifiedBaku = dhpItems.filter((i) => i.isMatchedInRekap).reduce((acc, i) => acc + (i.baku || 0), 0);
-  const verifiedHasil = dhpItems.filter((i) => i.isMatchedInRekap).reduce((acc, i) => acc + (i.hasil || 0), 0);
-  const verifiedSusutKg = dhpItems.filter((i) => i.isMatchedInRekap).reduce((acc, i) => acc + (i.susutKg || 0), 0);
+  const completedBaku = completedItems.reduce((acc, i) => acc + i.baku, 0);
+  const totalHasil = completedItems.reduce((acc, i) => acc + i.hasil, 0);
+  const verifiedItems = completedItems.filter((i) => i.isMatchedInRekap);
+  const verifiedBaku = verifiedItems.reduce((acc, i) => acc + (i.baku || 0), 0);
+  const verifiedHasil = verifiedItems.reduce((acc, i) => acc + (i.hasil || 0), 0);
+  const verifiedSusutKg = verifiedItems.reduce((acc, i) => acc + (i.susutKg || 0), 0);
   const verifiedSusutPct = verifiedBaku > 0 ? (verifiedSusutKg / verifiedBaku) * 100 : 0;
-  const totalSusutKg = dhpItems.reduce((acc, i) => acc + (i.susutKg || 0), 0);
-  const overallSusutPct = totalBaku > 0 ? (totalSusutKg / totalBaku) * 100 : 0;
+  const totalSusutKg = completedItems.reduce((acc, i) => acc + (i.susutKg || 0), 0);
+  const overallSusutPct = completedBaku > 0 ? (totalSusutKg / completedBaku) * 100 : 0;
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -194,31 +197,45 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
     setSyncSuccessMsg(null);
 
     try {
-      // Find items not yet in rekap or sync all
-      const itemsToSync = dhpItems.filter((i) => !i.isMatchedInRekap);
-      const targetItems = itemsToSync.length > 0 ? itemsToSync : dhpItems;
+      // Strictly sync ONLY completed batches (hasil > 0) — never send unfinished hasil=0 rows to Rekap!
+      const completedUnsynced = dhpItems.filter(
+        (i) => i.hasil > 0 && (!i.isMatchedInRekap || i.needsUpdateInRekap)
+      );
+      const completedAll = dhpItems.filter((i) => i.hasil > 0);
+      const targetItems =
+        completedUnsynced.length > 0 ? completedUnsynced : completedAll;
+
+      if (targetItems.length === 0) {
+        setSyncSuccessMsg(
+          'Seluruh batch aktif di Sheet DHP saat ini masih dalam proses pengolahan (Netto Hasil belum selesai ditimbang). Tidak ada baris setengah jadi yang dikirim ke Rekap.'
+        );
+        return;
+      }
 
       // Construct records to append
-      const convertedRecords: KrosokRecord[] = targetItems.map((item, idx) => ({
-        srcRow: item.matchedRow || 208 + idx,
-        tanggal: item.tanggal,
-        tanggalDisplay: item.tanggalDisplay,
-        bulan: item.bulan,
-        tahun: item.tahun,
-        jenisPerlakuan: item.jenisTembakau,
-        jenisKrosok: item.jenisKrosokMaster || item.jenisTembakau,
-        jenisProses: item.jalurProses,
-        baku: item.baku,
-        hasil: item.hasil,
-        susutKg: item.susutKg,
-        susutPct: item.susutPct,
-        gagangKg: item.gagangKg,
-        gagangPct: item.baku ? round2((item.gagangKg / item.baku) * 100) : 0,
-        airKg: 0,
-        debuKg: item.debuKg,
-        debuAirKg: item.debuKg,
-        debuAirPct: item.baku ? round2((item.debuKg / item.baku) * 100) : 0
-      }));
+      const convertedRecords: KrosokRecord[] = targetItems.map((item, idx) => {
+        const debuAirKg = round2((item.airKg || 0) + (item.debuKg || 0));
+        return {
+          srcRow: item.matchedRow || 1000 + idx,
+          tanggal: item.tanggal,
+          tanggalDisplay: item.tanggalDisplay,
+          bulan: item.bulan,
+          tahun: item.tahun,
+          jenisPerlakuan: `${item.jenisTembakau} ${item.jalurProses}`,
+          jenisKrosok: item.jenisTembakau,
+          jenisProses: item.jalurProses,
+          baku: item.baku,
+          hasil: item.hasil,
+          susutKg: item.susutKg,
+          susutPct: item.susutPct,
+          gagangKg: item.gagangKg,
+          gagangPct: item.baku ? round2((item.gagangKg / item.baku) * 100) : 0,
+          airKg: item.airKg || 0,
+          debuKg: item.debuKg,
+          debuAirKg,
+          debuAirPct: item.baku ? round2((debuAirKg / item.baku) * 100) : 0
+        };
+      });
 
       // If GAS endpoint is available, send to GAS
       if (config.gasUrl && config.gasUrl.startsWith('http')) {
@@ -242,7 +259,7 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
       }
 
       setSyncSuccessMsg(
-        `Berhasil menyinkronkan ${convertedRecords.length} batch dari DHP Krosok ke Datasheet Rekap Susut Krosok secara presisi!`
+        `Berhasil menyinkronkan ${convertedRecords.length} batch selesai dari DHP Krosok ke Datasheet Rekap Susut Krosok secara presisi!`
       );
     } catch (err: any) {
       setSyncSuccessMsg(`Sinkronisasi selesai (Data diselaraskan).`);
@@ -773,16 +790,24 @@ function perbaikiHasilNolDiRekap() {
                 }`}>
                   <div>
                     <div className={`text-[10px] font-semibold uppercase tracking-wider ${newCount > 0 ? 'text-blue-700' : 'text-slate-500'}`}>
-                      Batch Baru Siap Masuk
+                      Batch Selesai Siap Masuk
                     </div>
                     <div className={`text-base font-bold mt-0.5 flex items-baseline gap-1.5 ${newCount > 0 ? 'text-blue-700' : 'text-slate-700'}`}>
                       <span>{newCount} Batch</span>
                       <span className="text-[11px] font-normal text-slate-500">
-                        {newCount === 0 ? 'Semua tersinkron' : 'Perlu dibukukan'}
+                        {newCount > 0
+                          ? 'Siap dibukukan'
+                          : inProgressCount > 0
+                          ? `${inProgressCount} sedang proses`
+                          : 'Semua tersinkron'}
                       </span>
                     </div>
                     <div className="text-[10px] text-slate-500 mt-0.5 font-medium">
-                      {newCount === 0 ? 'Data DHP sudah sinkron' : `${newCount} baris baru ditemukan`}
+                      {newCount > 0
+                        ? `${newCount} batch selesai ditimbang`
+                        : inProgressCount > 0
+                        ? 'Menunggu timbangan Netto Hasil'
+                        : 'Data DHP sudah sinkron'}
                     </div>
                   </div>
                   {newCount > 0 ? (
@@ -952,11 +977,13 @@ function perbaikiHasilNolDiRekap() {
                                 )}
                               </td>
                               <td className="py-2 px-2.5 text-right font-mono font-medium text-rose-700">
-                                {formatNum(item.susutKg)}
+                                {item.hasil > 0 ? formatNum(item.susutKg) : '-'}
                               </td>
                               <td className="py-2 px-2.5 text-right font-mono font-semibold text-slate-800">
-                                <div>{formatPct(item.susutPct)}%</div>
-                                {evalItem && evalItem.status !== 'proses' && (
+                                <div>
+                                  {item.hasil > 0 ? `${formatPct(item.susutPct)}%` : '-'}
+                                </div>
+                                {evalItem && (
                                   <div className="text-[10px] text-slate-400 font-normal">
                                     Acuan {formatPct(evalItem.acuanPct)}%
                                   </div>
@@ -1090,10 +1117,15 @@ function perbaikiHasilNolDiRekap() {
                                     <Check className="w-3 h-3 text-emerald-600" />
                                     <span>Cocok (Brs {item.matchedRow})</span>
                                   </span>
+                                ) : item.hasil <= 0 ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                    <Clock className="w-3 h-3 text-slate-500" />
+                                    <span>Menunggu Hasil</span>
+                                  </span>
                                 ) : (
                                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                                     <Sparkles className="w-3 h-3 text-blue-600" />
-                                    <span>Batch Baru</span>
+                                    <span>Siap Masuk Rekap</span>
                                   </span>
                                 )}
                               </td>
@@ -1106,7 +1138,7 @@ function perbaikiHasilNolDiRekap() {
                       <tfoot className="sticky bottom-0 bg-slate-100/95 backdrop-blur-xs font-bold text-slate-800 border-t-2 border-slate-300 text-xs shadow-2xs z-10">
                         <tr>
                           <td colSpan={4} className="py-2.5 px-3 text-right uppercase text-[10px] tracking-wider text-slate-600">
-                            Total Neraca ({dhpItems.length} Batch):
+                            Total Neraca ({completedItems.length} Selesai / {dhpItems.length} Aktif):
                           </td>
                           <td className="py-2.5 px-2.5 text-right font-mono text-slate-900 font-bold">
                             {formatNum(totalBaku)}
@@ -1115,13 +1147,17 @@ function perbaikiHasilNolDiRekap() {
                             {formatNum(totalHasil)}
                           </td>
                           <td className="py-2.5 px-2.5 text-right font-mono text-rose-700 font-bold">
-                            {formatNum(totalSusutKg)}
+                            {completedItems.length > 0 ? formatNum(totalSusutKg) : '-'}
                           </td>
                           <td className="py-2.5 px-2.5 text-right font-mono text-slate-900 font-bold">
-                            {formatPct(overallSusutPct)}%
+                            {completedItems.length > 0 ? `${formatPct(overallSusutPct)}%` : '-'}
                           </td>
                           <td className="py-2.5 px-3 text-center text-[10px] font-mono text-slate-700">
-                            {oosBatchCount > 0 ? `${oosBatchCount} OOS` : 'Terkendali'}
+                            {oosBatchCount > 0
+                              ? `${oosBatchCount} OOS`
+                              : inProgressCount === dhpItems.length
+                              ? `${inProgressCount} Proses`
+                              : 'Terkendali'}
                           </td>
                           <td className="py-2.5 px-3 text-[10px] text-slate-600">
                             {evalValues.filter((e) => e.tags.length > 0).length} Bertag
@@ -1145,7 +1181,9 @@ function perbaikiHasilNolDiRekap() {
                       {needUpdateCount > 0
                         ? `Terdapat ${needUpdateCount} batch selesai yang perlu diselaraskan ke Rekap${newCount > 0 ? ` dan ${newCount} batch baru` : ''}.`
                         : newCount > 0
-                        ? `Terdapat ${newCount} batch baru yang siap dibukukan ke baris baru Sheet Rekap.`
+                        ? `Terdapat ${newCount} batch selesai yang siap dibukukan ke baris baru Sheet Rekap.`
+                        : inProgressCount > 0
+                        ? `${inProgressCount} batch aktif sedang dalam proses pengolahan (menunggu input Netto Hasil di Sheet DHP).`
                         : `Semua ${dhpItems.length} baris data DHP sudah tersinkronisasi presisi di Sheet Rekap.`}
                     </span>
                   </div>

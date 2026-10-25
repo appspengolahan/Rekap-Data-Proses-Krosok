@@ -18,8 +18,8 @@ import {
   setCachedRecords,
   loadConfig,
   saveConfig,
-  fetchFromGviz,
-  fetchFromGAS,
+  fetchUnifiedRekapRecords,
+  mergeRekapWithCompletedDhp,
   fetchDhpKrosokRecords,
   getCachedDhpItems,
   setCachedDhpItems,
@@ -155,21 +155,24 @@ export default function App() {
   };
 
   // Refresh DHP Krosok records from Sheet DHP Krosok
-  const refreshDhpData = useCallback(async () => {
-    try {
-      const items = await fetchDhpKrosokRecords(
-        config.dhpSpreadsheetId,
-        config.dhpSheetName,
-        records
-      );
-      if (items && items.length > 0) {
-        setDhpItems(items);
-        setCachedDhpItems(items);
+  const refreshDhpData = useCallback(
+    async (rekapOverride?: KrosokRecord[]) => {
+      try {
+        const items = await fetchDhpKrosokRecords(
+          config.dhpSpreadsheetId,
+          config.dhpSheetName,
+          rekapOverride || records
+        );
+        if (Array.isArray(items)) {
+          setDhpItems(items);
+          setCachedDhpItems(items);
+        }
+      } catch (e) {
+        console.warn('DHP sync notice:', e);
       }
-    } catch (e) {
-      console.warn('DHP sync notice:', e);
-    }
-  }, [config.dhpSpreadsheetId, config.dhpSheetName, records]);
+    },
+    [config.dhpSpreadsheetId, config.dhpSheetName, records]
+  );
 
   // Save Role change to localStorage
   const handleRoleChange = (role: UserRole) => {
@@ -206,70 +209,69 @@ export default function App() {
     );
   };
 
-  // Sync Logic (Silent Background or Manual)
-  const performSync = useCallback(async (isManual: boolean = false) => {
-    setSyncStatus('syncing');
-    try {
-      let freshData: KrosokRecord[] = await fetchFromGviz(config.spreadsheetId, config.sheetName);
+  // Sync Logic (Silent Background or Manual) — Unfiltered Single Source of Truth
+  const performSync = useCallback(
+    async (_isManual: boolean = false) => {
+      setSyncStatus('syncing');
+      try {
+        const freshData: KrosokRecord[] = await fetchUnifiedRekapRecords(config, records);
+        let activeRekap = records;
 
-      // If Gviz didn't return data, try GAS fallback if configured
-      if ((!freshData || freshData.length === 0) && config.gasUrl) {
-        freshData = await fetchFromGAS(config.gasUrl);
-      }
+        if (freshData && freshData.length > 0) {
+          activeRekap = freshData;
+          setRecords(freshData);
+          setCachedRecords(freshData);
+          const updatedConfig = { ...config, lastSyncTimestamp: Date.now() };
+          setConfig(updatedConfig);
+          saveConfig(updatedConfig);
+          setSyncStatus('synced');
 
-      if (freshData && freshData.length > 0) {
-        setRecords(freshData);
-        setCachedRecords(freshData);
-        const updatedConfig = { ...config, lastSyncTimestamp: Date.now() };
-        setConfig(updatedConfig);
-        saveConfig(updatedConfig);
-        setSyncStatus('synced');
-
-        // Refresh default weighted baseline if user has not manually locked custom overrides
-        try {
-          if (localStorage.getItem('krosok_standar_acuan_customized_v1') !== 'true') {
-            const meta = loadBaselineMeta();
-            const recomputed = calculateBaselineFromPeriod(
-              freshData,
-              meta.bulanMulai,
-              meta.bulanAkhir,
-              meta.tahunAcuan,
-              meta.globalWaspadaPct,
-              meta.globalOosPct,
-              meta.periodeLabel
-            );
-            setStandarList(recomputed);
-            saveStandarAcuanList(recomputed);
+          // Refresh default weighted baseline if user has not manually locked custom overrides
+          try {
+            if (localStorage.getItem('krosok_standar_acuan_customized_v1') !== 'true') {
+              const meta = loadBaselineMeta();
+              const recomputed = calculateBaselineFromPeriod(
+                freshData,
+                meta.bulanMulai,
+                meta.bulanAkhir,
+                meta.tahunAcuan,
+                meta.globalWaspadaPct,
+                meta.globalOosPct,
+                meta.periodeLabel
+              );
+              setStandarList(recomputed);
+              saveStandarAcuanList(recomputed);
+            }
+          } catch {
+            // ignore
           }
-        } catch {
-          // ignore
+        } else {
+          setSyncStatus('idle');
         }
-      } else {
-        // Retain existing records smoothly
-        setSyncStatus('idle');
-      }
 
-      // Concurrently refresh DHP active items
-      refreshDhpData();
-    } catch (err) {
-      console.warn('Sync notice (using cached/offline data):', err);
-      setSyncStatus('idle');
-    } finally {
-      setTimeout(() => {
-        setSyncStatus((prev) => (prev === 'syncing' ? 'idle' : prev));
-      }, 2000);
-    }
-  }, [config, refreshDhpData]);
+        // Concurrently refresh DHP active items matched against the latest Rekap truth
+        await refreshDhpData(activeRekap);
+      } catch (err) {
+        console.warn('Sync notice (using cached/offline data):', err);
+        setSyncStatus('idle');
+      } finally {
+        setTimeout(() => {
+          setSyncStatus((prev) => (prev === 'syncing' ? 'idle' : prev));
+        }, 2000);
+      }
+    },
+    [config, records, refreshDhpData]
+  );
 
   // Initial Background Sync & Factory Weather Fetch on App Mount
   useEffect(() => {
     refreshFactoryWeather();
-    // Initial silent sync after 300ms to let initial UI paint instantly
     const timer = setTimeout(() => {
       performSync(false);
     }, 300);
     return () => clearTimeout(timer);
-  }, [performSync, refreshFactoryWeather]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // AutoSync Background Timer Interval
   useEffect(() => {
@@ -281,10 +283,15 @@ export default function App() {
     return () => clearInterval(interval);
   }, [config.autoSyncEnabled, config.autoSyncIntervalSeconds, performSync]);
 
+  // Unified Single Source of Truth: Rekap Susut Krosok + Completed DHP Krosok (hasil > 0)
+  const unifiedRecords: KrosokRecord[] = useMemo(() => {
+    return mergeRekapWithCompletedDhp(records, dhpItems);
+  }, [records, dhpItems]);
+
   // Build complete Dashboard Data locally (Zero Latency)
   const dashboardData: DashboardData = useMemo(() => {
     return buildDashboardData(
-      records,
+      unifiedRecords,
       selectedTahun,
       bulanRingkasan,
       selectedJenisProses,
@@ -293,7 +300,7 @@ export default function App() {
       selectedTrendJenis
     );
   }, [
-    records,
+    unifiedRecords,
     selectedTahun,
     bulanRingkasan,
     selectedJenisProses,
@@ -416,7 +423,7 @@ export default function App() {
               entriTerkini={dashboardData.entriTerkini}
               lastUpdated={dashboardData.lastUpdated}
               isSyncing={syncStatus === 'syncing'}
-              totalRecordsCount={records.length}
+                totalRecordsCount={unifiedRecords.length}
               autoSyncEnabled={config.autoSyncEnabled}
               onToggleAutoSync={handleToggleAutoSync}
             />
@@ -448,7 +455,7 @@ export default function App() {
               {/* In Overview Mode, show Bulan Tab as primary detailed section */}
               <div className="tab-detail-section">
                 <TabBulan
-                  records={records}
+                  records={unifiedRecords}
                   selectedTahun={selectedTahun}
                   onTahunChange={setSelectedTahun}
                   selectedJenisProses={selectedJenisProses}
@@ -463,7 +470,7 @@ export default function App() {
           {activeTab === 'bulan' && (
             <div className="tab-detail-section">
               <TabBulan
-                records={records}
+                records={unifiedRecords}
                 selectedTahun={selectedTahun}
                 onTahunChange={setSelectedTahun}
                 selectedJenisProses={selectedJenisProses}
@@ -476,7 +483,9 @@ export default function App() {
 
           {activeTab === 'analisis_deviasi' && (
             <TabAnalisisDeviasi
-              records={records}
+              records={unifiedRecords}
+              rawRekapCount={records.length}
+              dhpItems={dhpItems}
               availableYears={dashboardData.filterOptions.tahun}
               standarList={standarList}
               baselineMeta={baselineMeta}
@@ -526,7 +535,7 @@ export default function App() {
             </div>
           )}
 
-          {activeTab === 'data_log' && <DataLogView records={records} dhpItems={dhpItems} />}
+          {activeTab === 'data_log' && <DataLogView records={unifiedRecords} dhpItems={dhpItems} />}
 
           {activeTab === 'switch_app' && (
             <TabSwitchApp

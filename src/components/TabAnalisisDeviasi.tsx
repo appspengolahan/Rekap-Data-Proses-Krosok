@@ -26,6 +26,7 @@ import {
 import {
   BaselineConfigMeta,
   BatchFieldNote,
+  DhpKrosokItem,
   ExecutiveSignatories,
   FactoryLocation,
   FactoryWeatherData,
@@ -44,6 +45,8 @@ import { PP1_FACTORY_LOCATIONS } from '../services/weatherService';
 
 interface TabAnalisisDeviasiProps {
   records: KrosokRecord[];
+  rawRekapCount?: number;
+  dhpItems?: DhpKrosokItem[];
   availableYears: string[];
   standarList: KrosokStandarAcuan[];
   baselineMeta: BaselineConfigMeta;
@@ -57,6 +60,8 @@ interface TabAnalisisDeviasiProps {
 
 export const TabAnalisisDeviasi: React.FC<TabAnalisisDeviasiProps> = ({
   records,
+  rawRekapCount,
+  dhpItems = [],
   availableYears,
   standarList,
   baselineMeta,
@@ -447,12 +452,18 @@ export const TabAnalisisDeviasi: React.FC<TabAnalisisDeviasiProps> = ({
                   'Jl. Parangargo No.153, Genengan, Parangargo, Kec. Wagir, Kabupaten Malang, Jawa Timur 65158'}
               </div>
 
-              {weatherData && (
+              {weatherData ? (
                 <p className="text-xs text-slate-300 leading-relaxed pt-1">
                   <strong className="text-white">
                     Status Higroskopis ({weatherData.hygroIndex.status}):
                   </strong>{' '}
                   {weatherData.hygroIndex.analisisKorelasi}
+                </p>
+              ) : (
+                <p className="text-xs text-slate-400 leading-relaxed pt-1">
+                  {weatherLoading
+                    ? 'Mengambil telemetri cuaca riil dari stasiun meteorologi lokasi pabrik...'
+                    : 'Telemetri cuaca riil belum tersedia saat ini. Evaluasi berjalan murni menggunakan data aktual Rekap & DHP Krosok tanpa angka estimasi cuaca.'}
                 </p>
               )}
             </div>
@@ -491,7 +502,7 @@ export const TabAnalisisDeviasi: React.FC<TabAnalisisDeviasiProps> = ({
                   <span>Kondisi Langit</span>
                 </div>
                 <div className="text-xs font-bold text-white mt-1 truncate max-w-[130px]">
-                  {weatherData?.weatherDesc || 'Memuat...'}
+                  {weatherLoading ? 'Memuat...' : weatherData?.weatherDesc || 'Belum Tersedia'}
                 </div>
                 <div className="text-[10px] text-slate-400 font-mono mt-0.5">
                   {weatherData ? `${weatherData.rainyDaysLast14d} hr hujan/14h` : '-'}
@@ -504,7 +515,7 @@ export const TabAnalisisDeviasi: React.FC<TabAnalisisDeviasiProps> = ({
                   <span>Efek Penguapan</span>
                 </div>
                 <div className="text-xs font-bold text-emerald-300 mt-1">
-                  {weatherData?.hygroIndex.potensiPenguapan || 'Normal'}
+                  {weatherData?.hygroIndex.potensiPenguapan || '--'}
                 </div>
                 <div className="text-[10px] text-slate-400 font-mono mt-0.5">
                   Angin {weatherData ? `${weatherData.windSpeed.toFixed(1)} km/j` : '-'}
@@ -540,6 +551,17 @@ export const TabAnalisisDeviasi: React.FC<TabAnalisisDeviasiProps> = ({
                   &gt;±{formatPct(baselineMeta.globalOosPct)}%
                 </strong>
               </p>
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 mt-1">
+                <span>Sumber Data Tunggal:</span>
+                <span className="font-semibold text-slate-700">
+                  Sheet Rekap Susut Krosok ({(rawRekapCount ?? records.length).toLocaleString('id-ID')} baris riil)
+                </span>
+                <span aria-hidden="true">·</span>
+                <span className="font-semibold text-slate-700">
+                  Sheet DHP Krosok ({dhpItems.length} batch aktif,{' '}
+                  {dhpItems.filter((d) => d.hasil > 0).length} selesai timbang)
+                </span>
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 shrink-0">
