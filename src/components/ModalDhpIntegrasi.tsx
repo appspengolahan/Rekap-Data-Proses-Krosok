@@ -653,8 +653,8 @@ function perbaikiHasilNolDiRekap() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-1 sm:p-2 lg:p-2.5 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-slate-200 w-full max-w-[98vw] 2xl:max-w-[1800px] overflow-hidden flex flex-col max-h-[98dvh] sm:max-h-[97vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-1 sm:p-1.5 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+      <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-slate-200 w-full max-w-[98vw] 2xl:max-w-[1800px] overflow-hidden flex flex-col max-h-[98dvh] sm:max-h-[98vh]">
         {/* Header - Wide Single-Row on Desktop with Live Sheet Route */}
         <div className="px-3.5 sm:px-5 py-1.5 sm:py-2 border-b border-slate-800 flex items-center justify-between gap-2 sm:gap-3 bg-gradient-to-r from-slate-900 via-slate-850 to-indigo-950 text-white shrink-0">
           <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
@@ -940,7 +940,7 @@ function perbaikiHasilNolDiRekap() {
 
         {/* Modal Body */}
         <div
-          className="flex-1 overflow-y-auto px-3 sm:px-4 lg:px-5 py-2 sm:py-2.5 space-y-2 min-h-0"
+          className="flex-1 overflow-y-auto px-3 sm:px-4 lg:px-5 py-1.5 sm:py-2 space-y-1.5 min-h-0"
           onScroll={() => {
             if (diagPopover && isDesktopHoverCapable()) {
               setDiagPopover(null);
@@ -957,7 +957,7 @@ function perbaikiHasilNolDiRekap() {
 
           {/* TAB 1: PREVIEW & SYNC */}
           {activeTab === 'preview' && (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {/* Compact 3-Column Metrics Strip */}
               <div
                 className={`grid ${
@@ -1437,29 +1437,29 @@ function perbaikiHasilNolDiRekap() {
                       <table className="w-full text-xs text-left">
                         <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200 uppercase text-[10px] tracking-wider">
                           <tr>
-                            <th className="py-1.5 px-2 text-center w-10">Row</th>
-                            <th className="py-1.5 px-2.5 whitespace-nowrap">Tanggal &amp; Waktu</th>
-                            <th className="py-1.5 px-2.5 sticky left-0 xl:static z-20 bg-slate-100 shadow-[1px_0_0_0_rgba(203,213,225,0.8)] xl:shadow-none">
+                            <th className="py-1.5 px-1.5 text-center w-9">Row</th>
+                            <th className="py-1.5 px-2 whitespace-nowrap">Tanggal &amp; Waktu</th>
+                            <th className="py-1.5 px-2 sticky left-0 lg:static z-20 bg-slate-100 shadow-[1px_0_0_0_rgba(203,213,225,0.8)] lg:shadow-none">
                               Jenis Krosok
                             </th>
-                            <th className="py-1.5 px-2 text-center w-14">Jalur</th>
-                            <th className="py-1.5 px-2.5 text-right whitespace-nowrap">
+                            <th className="py-1.5 px-1.5 text-center w-12">Jalur</th>
+                            <th className="py-1.5 px-2 text-right whitespace-nowrap">
                               Baku (Kg)
                             </th>
-                            <th className="py-1.5 px-2.5 text-right whitespace-nowrap">
+                            <th className="py-1.5 px-2 text-right whitespace-nowrap">
                               Hasil (Kg)
                             </th>
-                            <th className="py-1.5 px-2.5 text-right text-rose-700 whitespace-nowrap">
+                            <th className="py-1.5 px-2 text-right text-rose-700 whitespace-nowrap">
                               Susut (Kg)
                             </th>
-                            <th className="py-1.5 px-2.5 text-right text-rose-700 whitespace-nowrap">
+                            <th className="py-1.5 px-2 text-right text-rose-700 whitespace-nowrap">
                               Susut (%)
                             </th>
                             <th className="py-1.5 px-2 text-center whitespace-nowrap">
                               Status Deviasi
                             </th>
-                            <th className="py-1.5 px-2.5 whitespace-nowrap">Quick Tag Lapangan</th>
-                            <th className="py-1.5 px-2.5 text-center whitespace-nowrap">
+                            <th className="py-1.5 px-2 whitespace-nowrap">Quick Tag Lapangan</th>
+                            <th className="py-1.5 px-2 text-center whitespace-nowrap">
                               Status Rekap
                             </th>
                           </tr>
@@ -1476,38 +1476,33 @@ function perbaikiHasilNolDiRekap() {
                                   isOosRow ? 'bg-rose-50/25' : 'bg-white'
                                 }`}
                               >
-                                <td className="py-1.5 px-2 text-center font-mono text-[11px] text-slate-400 tabular-nums">
+                                <td className="py-1.5 px-1.5 text-center font-mono text-[11px] text-slate-400 tabular-nums">
                                   {item.rowIdx}
                                 </td>
-                                <td className="py-1.5 px-2.5 font-medium text-slate-800 whitespace-nowrap">
-                                  <div className="flex items-center gap-1.5">
-                                    <span>{item.tanggalDisplay}</span>
-                                    {hasRealTime && (
-                                      <span className="text-[10.5px] text-slate-400 font-mono inline-flex items-center gap-0.5 tabular-nums">
-                                        <span aria-hidden="true">·</span>
-                                        <Clock className="w-3 h-3 shrink-0" />
-                                        <span>{item.waktu}</span>
-                                      </span>
-                                    )}
-                                  </div>
+                                <td className="py-1.5 px-2 font-medium text-slate-800 whitespace-nowrap leading-tight">
+                                  <div>{item.tanggalDisplay}</div>
+                                  {hasRealTime && (
+                                    <div className="text-[10px] text-slate-400 font-mono inline-flex items-center gap-1 mt-0.5 tabular-nums leading-tight">
+                                      <Clock className="w-2.5 h-2.5 shrink-0" />
+                                      <span>{item.waktu}</span>
+                                    </div>
+                                  )}
                                 </td>
                                 <td
-                                  className={`py-1.5 px-2.5 font-semibold text-slate-900 sticky left-0 xl:static z-10 shadow-[1px_0_0_0_rgba(226,232,240,0.9)] xl:shadow-none transition-colors ${
+                                  className={`py-1.5 px-2 font-semibold text-slate-900 sticky left-0 lg:static z-10 shadow-[1px_0_0_0_rgba(226,232,240,0.9)] lg:shadow-none transition-colors leading-tight ${
                                     isOosRow
                                       ? 'bg-rose-50 group-hover:bg-blue-50'
                                       : 'bg-white group-hover:bg-blue-50'
                                   }`}
                                 >
-                                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                                    <span className="whitespace-nowrap">{item.jenisTembakau}</span>
-                                    {item.kodeStock && (
-                                      <span className="text-[10px] text-slate-400 font-normal font-mono whitespace-nowrap">
-                                        Stock: {item.kodeStock}
-                                      </span>
-                                    )}
-                                  </div>
+                                  <div className="whitespace-nowrap">{item.jenisTembakau}</div>
+                                  {item.kodeStock && (
+                                    <div className="text-[10px] text-slate-400 font-normal font-mono whitespace-nowrap mt-0.5 leading-tight">
+                                      Stock: {item.kodeStock}
+                                    </div>
+                                  )}
                                 </td>
-                                <td className="py-1.5 px-2 text-center">
+                                <td className="py-1.5 px-1.5 text-center">
                                   <span
                                     className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
                                       item.jalurProses === 'SKT'
@@ -1518,10 +1513,10 @@ function perbaikiHasilNolDiRekap() {
                                     {item.jalurProses}
                                   </span>
                                 </td>
-                                <td className="py-1.5 px-2.5 text-right font-mono font-bold text-slate-900 tabular-nums whitespace-nowrap">
+                                <td className="py-1.5 px-2 text-right font-mono font-bold text-slate-900 tabular-nums whitespace-nowrap">
                                   {formatNum(item.baku)}
                                 </td>
-                                <td className="py-1.5 px-2.5 text-right font-mono font-medium text-slate-700 tabular-nums whitespace-nowrap">
+                                <td className="py-1.5 px-2 text-right font-mono font-medium text-slate-700 tabular-nums whitespace-nowrap">
                                   {item.hasil > 0 ? (
                                     <span className="font-semibold text-emerald-800">
                                       {formatNum(item.hasil)}
@@ -1535,16 +1530,16 @@ function perbaikiHasilNolDiRekap() {
                                     </span>
                                   )}
                                 </td>
-                                <td className="py-1.5 px-2.5 text-right font-mono font-medium text-rose-700 tabular-nums whitespace-nowrap">
+                                <td className="py-1.5 px-2 text-right font-mono font-medium text-rose-700 tabular-nums whitespace-nowrap">
                                   {item.hasil > 0 ? formatNum(item.susutKg) : '-'}
                                 </td>
-                                <td className="py-1.5 px-2.5 text-right font-mono font-semibold text-slate-800 tabular-nums whitespace-nowrap">
-                                  <div className="inline-flex flex-col xl:flex-row xl:items-baseline xl:justify-end xl:gap-1.5">
+                                <td className="py-1.5 px-2 text-right font-mono font-semibold text-slate-800 tabular-nums whitespace-nowrap leading-tight">
+                                  <div className="flex flex-col items-end leading-tight">
                                     <span>
                                       {item.hasil > 0 ? `${formatPct(item.susutPct)}%` : '-'}
                                     </span>
                                     {evalItem && (
-                                      <span className="text-[10px] text-slate-400 font-normal">
+                                      <span className="text-[10px] text-slate-400 font-normal mt-0.5 leading-tight">
                                         (Acuan {formatPct(evalItem.acuanPct)}%)
                                       </span>
                                     )}
@@ -1628,7 +1623,7 @@ function perbaikiHasilNolDiRekap() {
                                 </td>
 
                                 {/* KOLOM QUICK TAG LAPANGAN (MANDOR) */}
-                                <td className="py-1.5 px-2.5">
+                                <td className="py-1.5 px-2">
                                   {evalItem && (
                                     <div className="flex flex-col items-start">
                                       {evalItem.tags.length > 0 ? (
@@ -1648,7 +1643,7 @@ function perbaikiHasilNolDiRekap() {
                                             )}
                                           </div>
                                           {evalItem.catatan && (
-                                            <div className="text-[10px] text-slate-500 truncate max-w-[160px]">
+                                            <div className="text-[10px] text-slate-500 truncate max-w-[150px]">
                                               &ldquo;{evalItem.catatan}&rdquo;
                                             </div>
                                           )}
@@ -1677,7 +1672,7 @@ function perbaikiHasilNolDiRekap() {
                                   )}
                                 </td>
 
-                                <td className="py-1.5 px-2.5 text-center whitespace-nowrap">
+                                <td className="py-1.5 px-2 text-center whitespace-nowrap">
                                   {item.needsUpdateInRekap ? (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-semibold bg-amber-50 text-amber-800 border border-amber-300 tabular-nums">
                                       <AlertCircle className="w-3 h-3 text-amber-600 shrink-0" />
@@ -1711,36 +1706,36 @@ function perbaikiHasilNolDiRekap() {
                           <tr>
                             <td
                               colSpan={4}
-                              className="py-2 px-3 text-right uppercase text-[10px] tracking-wider text-slate-600"
+                              className="py-1.5 px-2.5 text-right uppercase text-[10px] tracking-wider text-slate-600"
                             >
                               Total Neraca ({completedItems.length} Selesai / {dhpItems.length}{' '}
                               Aktif):
                             </td>
-                            <td className="py-2 px-2.5 text-right font-mono text-slate-900 font-bold tabular-nums whitespace-nowrap">
+                            <td className="py-1.5 px-2 text-right font-mono text-slate-900 font-bold tabular-nums whitespace-nowrap">
                               {formatNum(totalBaku)}
                             </td>
-                            <td className="py-2 px-2.5 text-right font-mono text-emerald-800 font-bold tabular-nums whitespace-nowrap">
+                            <td className="py-1.5 px-2 text-right font-mono text-emerald-800 font-bold tabular-nums whitespace-nowrap">
                               {formatNum(totalHasil)}
                             </td>
-                            <td className="py-2 px-2.5 text-right font-mono text-rose-700 font-bold tabular-nums whitespace-nowrap">
+                            <td className="py-1.5 px-2 text-right font-mono text-rose-700 font-bold tabular-nums whitespace-nowrap">
                               {completedItems.length > 0 ? formatNum(totalSusutKg) : '-'}
                             </td>
-                            <td className="py-2 px-2.5 text-right font-mono text-slate-900 font-bold tabular-nums whitespace-nowrap">
+                            <td className="py-1.5 px-2 text-right font-mono text-slate-900 font-bold tabular-nums whitespace-nowrap">
                               {completedItems.length > 0
                                 ? `${formatPct(overallSusutPct)}%`
                                 : '-'}
                             </td>
-                            <td className="py-2 px-2 text-center text-[10px] font-mono text-slate-700 whitespace-nowrap">
+                            <td className="py-1.5 px-2 text-center text-[10px] font-mono text-slate-700 whitespace-nowrap">
                               {oosBatchCount > 0
                                 ? `${oosBatchCount} OOS`
                                 : inProgressCount === dhpItems.length
                                 ? `${inProgressCount} Proses`
                                 : 'Terkendali'}
                             </td>
-                            <td className="py-2 px-2.5 text-[10px] text-slate-600 whitespace-nowrap">
+                            <td className="py-1.5 px-2 text-[10px] text-slate-600 whitespace-nowrap">
                               {evalValues.filter((e) => e.tags.length > 0).length} Bertag
                             </td>
-                            <td className="py-2 px-2.5 text-center text-[10px] text-emerald-700 font-semibold whitespace-nowrap">
+                            <td className="py-1.5 px-2 text-center text-[10px] text-emerald-700 font-semibold whitespace-nowrap">
                               {matchedCount}/{dhpItems.length} Terverifikasi
                             </td>
                           </tr>
