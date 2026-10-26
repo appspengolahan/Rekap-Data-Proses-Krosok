@@ -30,6 +30,7 @@ import {
   BaselineConfigMeta,
   BatchFieldNote,
   DhpKrosokItem,
+  FactoryLocation,
   FactoryWeatherData,
   GASConfig,
   KrosokRecord,
@@ -63,7 +64,7 @@ interface ModalDhpIntegrasiProps {
   onSaveBatchNote?: (note: BatchFieldNote) => void;
   weatherData?: FactoryWeatherData | null;
   weatherLoading?: boolean;
-  onRefreshWeather?: () => void;
+  onRefreshWeather?: (locationOverride?: FactoryLocation, forceRefresh?: boolean) => void;
   onNavigateToAnalisisTab?: () => void;
 }
 

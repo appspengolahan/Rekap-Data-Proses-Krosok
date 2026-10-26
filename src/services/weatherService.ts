@@ -5,71 +5,58 @@ import {
   HygroAnalysis
 } from '../types';
 
+export const OFFICIAL_FACTORY_ADDRESS =
+  'PT BATU KARANG Jl. Parangargo No.153, Genengan, Parangargo, Kec. Wagir, Kabupaten Malang, Jawa Timur 65158 - INDONESIA';
+
 export const PP1_FACTORY_LOCATIONS: FactoryLocation[] = [
   {
     id: 'batu-karang-wagir',
-    name: 'PT BATU KARANG (Pabrik Sentral Wagir)',
-    region: 'Kab. Malang, Jawa Timur',
-    address:
-      'Jl. Parangargo No.153, Genengan, Parangargo, Kec. Wagir, Kabupaten Malang, Jawa Timur 65158',
-    lat: -8.0175,
-    lon: 112.5939,
-    elevationM: 465,
+    name: 'PT BATU KARANG — Pabrik Pengolahan Krosok (Wagir)',
+    region: 'Kec. Wagir, Kab. Malang',
+    address: OFFICIAL_FACTORY_ADDRESS,
+    lat: -8.0176,
+    lon: 112.5967,
+    elevationM: 444,
     isDefault: true
-  },
-  {
-    id: 'bojonegoro',
-    name: 'Unit Bojonegoro (BKR)',
-    region: 'Jawa Timur',
-    address: 'Unit Pengolahan Bojonegoro, Jawa Timur',
-    lat: -7.15,
-    lon: 111.88
-  },
-  {
-    id: 'ploso',
-    name: 'Unit Jombang / Ploso (MYN)',
-    region: 'Jawa Timur',
-    address: 'Unit Pengolahan Ploso, Jombang, Jawa Timur',
-    lat: -7.45,
-    lon: 112.23
-  },
-  {
-    id: 'madura',
-    name: 'Unit Madura / Pamekasan (BAT)',
-    region: 'Jawa Timur',
-    address: 'Unit Pengolahan Pamekasan, Madura, Jawa Timur',
-    lat: -7.16,
-    lon: 113.48
   }
 ];
 
 const WEATHER_STORAGE_KEYS = {
-  LOCATION_ID: 'krosok_active_factory_loc_v1',
-  CACHE_PREFIX: 'krosok_weather_cache_v1'
+  LOCATION_ID: 'krosok_active_factory_loc_v2',
+  CACHE_PREFIX: 'krosok_weather_cache_v2'
 };
 
-export function getSelectedFactoryLocation(): FactoryLocation {
+const LEGACY_WEATHER_KEYS = [
+  'krosok_active_factory_loc_v1',
+  'krosok_weather_cache_v1_batu-karang-wagir',
+  'krosok_weather_cache_v1_bojonegoro',
+  'krosok_weather_cache_v1_ploso',
+  'krosok_weather_cache_v1_madura'
+];
+
+function purgeLegacyWeatherCache(): void {
   try {
-    const savedId = localStorage.getItem(WEATHER_STORAGE_KEYS.LOCATION_ID);
-    if (savedId) {
-      const found = PP1_FACTORY_LOCATIONS.find((l) => l.id === savedId);
-      if (found) return found;
+    for (const k of LEGACY_WEATHER_KEYS) {
+      localStorage.removeItem(k);
     }
   } catch {
     // ignore storage errors
   }
+}
+
+export function getSelectedFactoryLocation(): FactoryLocation {
+  purgeLegacyWeatherCache();
   return PP1_FACTORY_LOCATIONS[0];
 }
 
-export function setSelectedFactoryLocation(locationId: string): FactoryLocation {
-  const found =
-    PP1_FACTORY_LOCATIONS.find((l) => l.id === locationId) || PP1_FACTORY_LOCATIONS[0];
+export function setSelectedFactoryLocation(_locationId: string): FactoryLocation {
+  const locked = PP1_FACTORY_LOCATIONS[0];
   try {
-    localStorage.setItem(WEATHER_STORAGE_KEYS.LOCATION_ID, found.id);
+    localStorage.setItem(WEATHER_STORAGE_KEYS.LOCATION_ID, locked.id);
   } catch {
     // ignore
   }
-  return found;
+  return locked;
 }
 
 export function decodeWeatherCode(code: number): string {
@@ -163,10 +150,10 @@ export function computeHygroIndex(
 }
 
 export async function fetchFactoryWeather(
-  locationOverride?: FactoryLocation,
+  _locationOverride?: FactoryLocation,
   forceRefresh: boolean = false
 ): Promise<FactoryWeatherData | null> {
-  const loc = locationOverride || getSelectedFactoryLocation();
+  const loc = getSelectedFactoryLocation();
   const cacheKey = `${WEATHER_STORAGE_KEYS.CACHE_PREFIX}_${loc.id}`;
 
   let staleCache: FactoryWeatherData | null = null;
@@ -260,8 +247,19 @@ export async function fetchFactoryWeather(
     }
 
     const denom = count14d || 1;
+    const resolvedElevation =
+      typeof json.elevation === 'number' && !isNaN(json.elevation)
+        ? Math.round(json.elevation)
+        : loc.elevationM;
+
+    const verifiedLocation: FactoryLocation = {
+      ...loc,
+      address: OFFICIAL_FACTORY_ADDRESS,
+      elevationM: resolvedElevation
+    };
+
     const data: FactoryWeatherData = {
-      location: loc,
+      location: verifiedLocation,
       temperature: temp,
       humidity: rh,
       weatherCode: wCode,

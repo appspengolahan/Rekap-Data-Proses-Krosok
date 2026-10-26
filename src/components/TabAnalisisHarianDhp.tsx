@@ -20,6 +20,7 @@ import {
   BatchFieldNote,
   DeviasiStatus,
   DhpKrosokItem,
+  FactoryLocation,
   FactoryWeatherData,
   KrosokRecord,
   KrosokStandarAcuan,
@@ -32,6 +33,11 @@ import {
   findStandarForVariant,
   makeBatchNoteKey
 } from '../services/acuanService';
+import {
+  getSelectedFactoryLocation,
+  OFFICIAL_FACTORY_ADDRESS,
+  PP1_FACTORY_LOCATIONS
+} from '../services/weatherService';
 
 interface TabAnalisisHarianDhpProps {
   dhpItems: DhpKrosokItem[];
@@ -41,7 +47,7 @@ interface TabAnalisisHarianDhpProps {
   batchNotes: Record<string, BatchFieldNote>;
   weatherData: FactoryWeatherData | null;
   weatherLoading?: boolean;
-  onRefreshWeather?: () => void;
+  onRefreshWeather?: (locationOverride?: FactoryLocation, forceRefresh?: boolean) => void;
   activeSheetDateLabel?: string;
   onOpenQuickTag?: (item: DhpKrosokItem, evalData: TacticalBatchEvaluation) => void;
   onNavigateToMonthlyAnalisis?: () => void;
@@ -483,6 +489,365 @@ export const TabAnalisisHarianDhp: React.FC<TabAnalisisHarianDhpProps> = ({
     [inProgressDhpItems]
   );
 
+  // Live Telemetry Location & Auto-Poll Lifecycle (Open-Meteo Real-Time — Locked to PT BATU KARANG Wagir)
+  const [showHourlyTrend, setShowHourlyTrend] = useState<boolean>(false);
+
+  // Immediately pull telemetry if missing on mount, plus 5-minute live background refresh
+  useEffect(() => {
+    if (!onRefreshWeather) return;
+    if (!weatherData && !weatherLoading) {
+      onRefreshWeather(PP1_FACTORY_LOCATIONS[0], false);
+    }
+    const liveInterval = setInterval(() => {
+      onRefreshWeather(PP1_FACTORY_LOCATIONS[0], true);
+    }, 300_000);
+    return () => clearInterval(liveInterval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onRefreshWeather]);
+
+  const activeFactoryLocation = useMemo(
+    () => weatherData?.location || getSelectedFactoryLocation(),
+    [weatherData?.location]
+  );
+
+  const fetchedTimeWib = useMemo(() => {
+    if (!weatherData?.fetchedAt) return '';
+    try {
+      const d = new Date(weatherData.fetchedAt);
+      if (isNaN(d.getTime())) return '';
+      return `${new Intl.DateTimeFormat('id-ID', {
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Asia/Jakarta'
+      }).format(d)} WIB`;
+    } catch {
+      return '';
+    }
+  }, [weatherData?.fetchedAt]);
+
+  const hygroCardTheme = useMemo(() => {
+    const st = weatherData?.hygroIndex.status;
+    if (!st || st === 'Optimal') {
+      return {
+        box: 'bg-emerald-950/45 border-emerald-700/60',
+        label: 'text-emerald-300/90',
+        value: 'text-emerald-400',
+        code: 'STABIL',
+        sub: 'text-emerald-300/75'
+      };
+    }
+    if (st === 'Lembab / Hujan') {
+      return {
+        box: 'bg-sky-950/50 border-sky-700/60',
+        label: 'text-sky-300/90',
+        value: 'text-sky-300',
+        code: 'LEMBAB',
+        sub: 'text-sky-300/75'
+      };
+    }
+    if (st === 'Panas Ekstrem') {
+      return {
+        box: 'bg-rose-950/50 border-rose-700/60',
+        label: 'text-rose-300/90',
+        value: 'text-rose-400',
+        code: 'UAP TINGGI',
+        sub: 'text-rose-300/75'
+      };
+    }
+    return {
+      box: 'bg-amber-950/45 border-amber-700/60',
+      label: 'text-amber-300/90',
+      value: 'text-amber-400',
+      code: 'WASPADA UAP',
+      sub: 'text-amber-300/75'
+    };
+  }, [weatherData?.hygroIndex.status]);
+
+  // Extract 6-hour microclimate telemetry window centered around current WIB hour
+  const hourlySlots = useMemo(() => {
+    const list = weatherData?.hourly || [];
+    if (list.length === 0) return [];
+    const nowWib = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 13);
+    const currentIdx = list.findIndex((pt) => pt.timeIso.startsWith(nowWib));
+    const startIdx =
+      currentIdx >= 0
+        ? Math.max(0, Math.min(list.length - 6, currentIdx - 2))
+        : Math.max(0, list.length - 6);
+    return list.slice(startIdx, startIdx + 6);
+  }, [weatherData?.hourly]);
+
+  const handleManualTelemetryRefresh = () => {
+    if (!onRefreshWeather) return;
+    onRefreshWeather(activeFactoryLocation, true);
+  };
+
+  // Dedicated Live Telemetry Console (Upper Viewport Priority)
+  const liveTelemetriPanel = (
+    <div className="rounded-xl bg-slate-950 text-white p-3.5 sm:p-4 border border-slate-800 space-y-3 shadow-xs">
+      {/* Header Row: Title + Live Telemetry Status on Left | Factory Location Selector + Refresh + Address on Right */}
+      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-2.5 border-b border-slate-800/90 pb-3">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/35 flex items-center justify-center text-sky-400 shrink-0 mt-0.5">
+            <Thermometer className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h4 className="text-xs font-bold tracking-wide uppercase text-white">
+                Iklim Lingkungan Pabrik &amp; Indeks Higroskopis Real-Time
+              </h4>
+              <span className="inline-flex items-center gap-1.5 text-[10px] font-mono font-semibold text-emerald-400 tabular-nums">
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    weatherLoading ? 'bg-amber-400 animate-ping' : 'bg-emerald-400 animate-pulse'
+                  }`}
+                />
+                <span>
+                  {weatherLoading
+                    ? 'MENYINKRONKAN TELEMETRI...'
+                    : `LIVE TELEMETRI${fetchedTimeWib ? ` · ${fetchedTimeWib}` : ''}`}
+                </span>
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Menganalisis pengaruh suhu &amp; kelembaban (RH%) terhadap laju penguapan air dan
+              kerapuhan debu krosok
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-col lg:items-end gap-1.5 shrink-0 lg:max-w-[54%]">
+          <div className="flex flex-wrap items-center lg:justify-end gap-1.5 w-full">
+            <div
+              className="min-h-[34px] inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-[11px] font-semibold text-slate-100"
+              title="Titik koordinat sensor satelit dikunci pada lokasi resmi pabrik PT BATU KARANG"
+            >
+              <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="truncate">PT BATU KARANG — Wagir, Kab. Malang</span>
+              <span className="hidden sm:inline font-mono text-[10px] text-sky-400">
+                ({activeFactoryLocation.lat.toFixed(4)}, {activeFactoryLocation.lon.toFixed(4)})
+              </span>
+            </div>
+
+            {onRefreshWeather && (
+              <button
+                type="button"
+                onClick={handleManualTelemetryRefresh}
+                disabled={weatherLoading}
+                aria-label="Segarkan telemetri cuaca pabrik"
+                title="Tarik ulang telemetri cuaca aktual dari sensor satelit lokasi pabrik PT BATU KARANG"
+                className="min-h-[34px] min-w-[34px] inline-flex items-center justify-center px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-200 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
+              >
+                <RefreshCw
+                  className={`w-3.5 h-3.5 text-sky-400 ${weatherLoading ? 'animate-spin' : ''}`}
+                />
+              </button>
+            )}
+
+            {hourlySlots.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowHourlyTrend((prev) => !prev)}
+                className={`min-h-[34px] px-2.5 py-1 rounded-lg border text-[10.5px] font-semibold transition-colors cursor-pointer shrink-0 ${
+                  showHourlyTrend
+                    ? 'bg-sky-500/20 border-sky-500/50 text-sky-300'
+                    : 'bg-slate-900 hover:bg-slate-800 border-slate-700 text-slate-300'
+                }`}
+                title="Tampilkan tren mikroklimat 6 jam"
+              >
+                6 Jam
+              </button>
+            )}
+          </div>
+
+          <div className="text-[10.5px] text-slate-300 lg:text-right leading-snug">
+            {activeFactoryLocation.address || OFFICIAL_FACTORY_ADDRESS}
+          </div>
+        </div>
+      </div>
+
+      {weatherData ? (
+        <>
+          {/* 4 Live Telemetry Readout Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 tabular-nums">
+            {/* 1. Suhu Udara */}
+            <div className="rounded-lg bg-slate-900/90 border border-slate-800 px-3 py-2.5">
+              <div className="text-[10.5px] text-slate-400 flex items-center justify-between gap-1">
+                <span>Suhu Udara</span>
+                <Thermometer className="w-3 h-3 text-amber-400 shrink-0" />
+              </div>
+              <div className="mt-1 flex items-baseline gap-1.5">
+                <span className="font-mono text-base sm:text-lg font-bold text-white">
+                  {weatherData.temperature.toFixed(1)}°C
+                </span>
+                <span className="text-[10.5px] text-slate-400">Ambien</span>
+              </div>
+              <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                Elevasi {weatherData.location.elevationM ?? 444}m dpl
+              </div>
+            </div>
+
+            {/* 2. Kelembaban (RH) */}
+            <div className="rounded-lg bg-slate-900/90 border border-slate-800 px-3 py-2.5">
+              <div className="text-[10.5px] text-slate-400 flex items-center justify-between gap-1">
+                <span>Kelembaban (RH)</span>
+                <Droplets className="w-3 h-3 text-sky-400 shrink-0" />
+              </div>
+              <div className="mt-1 flex items-baseline gap-1.5">
+                <span className="font-mono text-base sm:text-lg font-bold text-sky-400">
+                  {Math.round(weatherData.humidity)}%
+                </span>
+                <span className="text-[10.5px] text-slate-400">Relatif</span>
+              </div>
+              <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                Presipitasi {weatherData.precipitation.toFixed(1)} mm
+              </div>
+            </div>
+
+            {/* 3. Kondisi Cuaca */}
+            <div className="rounded-lg bg-slate-900/90 border border-slate-800 px-3 py-2.5">
+              <div className="text-[10.5px] text-slate-400 flex items-center justify-between gap-1">
+                <span>Kondisi Cuaca</span>
+                {weatherData.precipitation > 0 ? (
+                  <CloudRain className="w-3 h-3 text-sky-300 shrink-0" />
+                ) : (
+                  <Sun className="w-3 h-3 text-amber-300 shrink-0" />
+                )}
+              </div>
+              <div
+                className="text-xs sm:text-sm font-bold text-white mt-1 truncate"
+                title={weatherData.weatherDesc}
+              >
+                {weatherData.weatherDesc}
+              </div>
+              <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1.5 font-mono">
+                <Wind className="w-3 h-3 text-slate-500 shrink-0" />
+                <span>{Math.round(weatherData.windSpeed)} km/j</span>
+                <span className="text-slate-600">·</span>
+                <span>{weatherData.isDay ? 'Siang' : 'Malam'}</span>
+              </div>
+            </div>
+
+            {/* 4. Indeks Higroskopis */}
+            <div className={`rounded-lg border px-3 py-2.5 ${hygroCardTheme.box}`}>
+              <div className={`text-[10.5px] font-medium ${hygroCardTheme.label}`}>
+                Indeks Higroskopis
+              </div>
+              <div className="mt-1 flex items-baseline gap-1.5 flex-wrap">
+                <span className={`text-xs sm:text-sm font-bold ${hygroCardTheme.value}`}>
+                  {weatherData.hygroIndex.status}
+                </span>
+                <span className="font-mono text-[10px] font-semibold tracking-wider opacity-85 text-white">
+                  {hygroCardTheme.code}
+                </span>
+              </div>
+              <div className={`text-[10px] mt-0.5 font-mono ${hygroCardTheme.sub}`}>
+                Uap: {weatherData.hygroIndex.potensiPenguapan} · Debu:{' '}
+                {weatherData.hygroIndex.resikoDebu}
+              </div>
+            </div>
+          </div>
+
+          {/* Optional 6-Hour Microclimate Telemetry Strip */}
+          {showHourlyTrend && hourlySlots.length > 0 && (
+            <div className="rounded-lg bg-slate-900/95 border border-slate-800 px-3 py-2 space-y-1.5 tabular-nums">
+              <div className="flex flex-wrap items-center justify-between gap-1 text-[10px] text-slate-400">
+                <span className="font-semibold text-sky-300">
+                  Tren Telemetri Jam-Jaman ({activeFactoryLocation.region})
+                </span>
+                <span className="font-mono">
+                  Koordinat {activeFactoryLocation.lat.toFixed(4)},{' '}
+                  {activeFactoryLocation.lon.toFixed(4)} · 14 Hari Terakhir:{' '}
+                  {weatherData.rainyDaysLast14d} hari hujan
+                </span>
+              </div>
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                {hourlySlots.map((slot) => (
+                  <div
+                    key={slot.timeIso}
+                    className="rounded bg-slate-950/80 border border-slate-800/80 px-2 py-1 text-center font-mono text-[10.5px]"
+                  >
+                    <div className="text-slate-400 text-[10px]">
+                      {slot.timeIso.slice(11, 16) || slot.timeIso}
+                    </div>
+                    <div className="font-bold text-white mt-0.5">
+                      {slot.temperature.toFixed(1)}°C
+                    </div>
+                    <div className="text-sky-400 text-[10px]">
+                      RH {Math.round(slot.humidity)}%
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Bottom 2-Column Correlation & Process Control Recommendation */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5 text-[11px]">
+            <div className="lg:col-span-2 rounded-lg bg-slate-900/85 border border-slate-800 p-3 leading-relaxed text-slate-300">
+              <div className="font-bold text-sky-300 mb-1">
+                Korelasi Cuaca &amp; Susut Krosok Hari Ini ({activeDateText}):
+              </div>
+              <p>
+                Pada suhu <strong className="font-mono text-white">{weatherData.temperature.toFixed(1)}°C</strong>{' '}
+                &amp; RH <strong className="font-mono text-sky-300">{Math.round(weatherData.humidity)}%</strong>:{' '}
+                {weatherData.hygroIndex.analisisKorelasi}
+                {dailyAnalysis.rows.length > 0 && (
+                  <>
+                    {' '}
+                    Neraca fisik hari ini mencatat{' '}
+                    {dailyAnalysis.totalUapAir >= 0 ? 'penguapan air' : 'serapan uap air'}{' '}
+                    <strong className="text-sky-300 font-mono">
+                      {dailyAnalysis.totalUapAir < 0 ? '+' : ''}
+                      {formatNum(Math.abs(dailyAnalysis.totalUapAir))} Kg (
+                      {formatPct(Math.abs(dailyAnalysis.uapAirPctBaku))}% dari baku)
+                    </strong>
+                    , pemisahan debu{' '}
+                    <strong className="text-amber-300 font-mono">
+                      {formatNum(dailyAnalysis.totalDebu)} Kg (
+                      {formatPct(dailyAnalysis.debuPctBaku)}%)
+                    </strong>
+                    , serta fraksi gagang{' '}
+                    <strong className="text-slate-100 font-mono">
+                      {formatNum(dailyAnalysis.totalGagang)} Kg (
+                      {formatPct(dailyAnalysis.gagangPctBaku)}%)
+                    </strong>
+                    .
+                  </>
+                )}
+              </p>
+            </div>
+
+            <div className="rounded-lg bg-slate-900/85 border border-slate-800 p-3 leading-relaxed text-slate-300 flex flex-col justify-between gap-2">
+              <div>
+                <div className="font-bold text-amber-300 uppercase tracking-wide text-[10.5px] mb-1">
+                  Rekomendasi Kontrol Mesin / Proses:
+                </div>
+                <p>{weatherData.hygroIndex.rekomendasiOperasional}</p>
+              </div>
+              {onNavigateToMonthlyAnalisis && (
+                <button
+                  type="button"
+                  onClick={onNavigateToMonthlyAnalisis}
+                  className="min-h-[32px] self-start inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[10.5px] font-semibold text-sky-300 transition-colors cursor-pointer"
+                >
+                  <Sliders className="w-3 h-3" />
+                  <span>Buka Evaluasi Bulanan &amp; Acuan</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="py-5 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+          <RefreshCw className="w-3.5 h-3.5 text-sky-400 animate-spin" />
+          <span>
+            Menghubungkan telemetri cuaca aktual {activeFactoryLocation.name}...
+          </span>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-3">
       {/* Top Bar: Active Evaluation Date & Source Mode Switcher */}
@@ -558,32 +923,37 @@ export const TabAnalisisHarianDhp: React.FC<TabAnalisisHarianDhpProps> = ({
 
       {/* Empty State when Live DHP is selected and has 0 completed batches */}
       {dailyAnalysis.rows.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-8 text-center space-y-2">
-          <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center mx-auto text-blue-600">
-            <Info className="w-4 h-4" />
-          </div>
-          <div className="text-xs sm:text-sm font-semibold text-slate-800">
-            Belum ada batch selesai ditimbang pada Sheet DHP hari ini
-            {activeSheetDateLabel ? ` (${activeSheetDateLabel})` : ''}.
-          </div>
-          <p className="text-[11px] text-slate-500 max-w-md mx-auto">
-            Begitu timbangan Netto Hasil batch pertama diinput ke Sheet DHP Krosok, sistem
-            Alarm Dini otomatis menghitung dekomposisi susut Air, Gagang, dan Debu terhadap
-            standar acuan.
-          </p>
-          {latestRekapBundle.rows.length > 0 && (
-            <div className="pt-1">
-              <button
-                type="button"
-                onClick={() => setSourceMode('rekap_terakhir')}
-                className="min-h-[36px] inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors cursor-pointer"
-              >
-                <span>
-                  Tinjau Hari Proses Terakhir ({latestRekapBundle.tanggalDisplay})
-                </span>
-              </button>
+        <div className="space-y-3">
+          {/* Live Telemetry remains visible in morning shift before first batch completes */}
+          {liveTelemetriPanel}
+
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-7 text-center space-y-2">
+            <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center mx-auto text-blue-600">
+              <Info className="w-4 h-4" />
             </div>
-          )}
+            <div className="text-xs sm:text-sm font-semibold text-slate-800">
+              Belum ada batch selesai ditimbang pada Sheet DHP hari ini
+              {activeSheetDateLabel ? ` (${activeSheetDateLabel})` : ''}.
+            </div>
+            <p className="text-[11px] text-slate-500 max-w-md mx-auto">
+              Begitu timbangan Netto Hasil batch pertama diinput ke Sheet DHP Krosok, sistem
+              Alarm Dini otomatis menghitung dekomposisi susut Air, Gagang, dan Debu terhadap
+              standar acuan.
+            </p>
+            {latestRekapBundle.rows.length > 0 && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setSourceMode('rekap_terakhir')}
+                  className="min-h-[36px] inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors cursor-pointer"
+                >
+                  <span>
+                    Tinjau Hari Proses Terakhir ({latestRekapBundle.tanggalDisplay})
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         <>
@@ -756,7 +1126,10 @@ export const TabAnalisisHarianDhp: React.FC<TabAnalisisHarianDhpProps> = ({
             </div>
           </div>
 
-          {/* SECTION 3: RINCIAN KOMPARASI SELURUH BAHAN YANG DIPROSES HARI INI */}
+          {/* SECTION 3 (UPPER VIEWPORT): LIVE TELEMETRI IKLIM LINGKUNGAN PABRIK & INDEKS HIGROSKOPIS */}
+          {liveTelemetriPanel}
+
+          {/* SECTION 4: RINCIAN KOMPARASI SELURUH BAHAN YANG DIPROSES HARI INI */}
           <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
             <div className="px-3.5 py-2.5 bg-slate-900 text-white flex flex-wrap items-center justify-between gap-2">
               <div>
@@ -1038,144 +1411,6 @@ export const TabAnalisisHarianDhp: React.FC<TabAnalisisHarianDhpProps> = ({
           </div>
         </>
       )}
-
-      {/* SECTION 4: IKLIM LINGKUNGAN PABRIK PT BATU KARANG & INDEKS HIGROSKOPIS REAL-TIME */}
-      <div className="rounded-xl bg-slate-950 text-white p-3.5 sm:p-4 border border-slate-800 space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
-          <div>
-            <h4 className="text-xs font-bold tracking-tight text-white">
-              Iklim Lingkungan Pabrik &amp; Indeks Higroskopis Real-Time
-            </h4>
-            <p className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-1 flex-wrap">
-              <MapPin className="w-3 h-3 text-sky-400 shrink-0" />
-              <span>
-                PT BATU KARANG — Jl. Parangargo No.153, Genengan, Parangargo, Kec. Wagir, Kab.
-                Malang, Jawa Timur 65158
-              </span>
-            </p>
-          </div>
-          {onRefreshWeather && (
-            <button
-              type="button"
-              onClick={onRefreshWeather}
-              disabled={weatherLoading}
-              className="min-h-[34px] sm:min-h-0 self-start sm:self-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-[11px] font-semibold text-slate-200 transition-colors cursor-pointer disabled:opacity-50 shrink-0"
-              title="Perbarui data cuaca aktual lokasi pabrik"
-            >
-              <RefreshCw
-                className={`w-3 h-3 text-sky-400 ${weatherLoading ? 'animate-spin' : ''}`}
-              />
-              <span>{weatherLoading ? 'Memuat...' : 'Segarkan Cuaca'}</span>
-            </button>
-          )}
-        </div>
-
-        {weatherData ? (
-          <>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 tabular-nums">
-              <div className="rounded-lg bg-slate-900/90 border border-slate-800 p-2.5">
-                <div className="text-[10.5px] text-slate-400 flex items-center gap-1">
-                  <Thermometer className="w-3 h-3 text-amber-400" />
-                  <span>Suhu Udara</span>
-                </div>
-                <div className="font-mono text-base font-bold text-amber-400 mt-1">
-                  {weatherData.temperature.toFixed(1)}°C
-                </div>
-                <div className="text-[10px] text-slate-500 mt-0.5">Ambien Wagir</div>
-              </div>
-
-              <div className="rounded-lg bg-slate-900/90 border border-slate-800 p-2.5">
-                <div className="text-[10.5px] text-slate-400 flex items-center gap-1">
-                  <Droplets className="w-3 h-3 text-sky-400" />
-                  <span>Kelembaban (RH)</span>
-                </div>
-                <div className="font-mono text-base font-bold text-sky-400 mt-1">
-                  {Math.round(weatherData.humidity)}%
-                </div>
-                <div className="text-[10px] text-slate-500 mt-0.5">Kelembaban Relatif</div>
-              </div>
-
-              <div className="rounded-lg bg-slate-900/90 border border-slate-800 p-2.5">
-                <div className="text-[10.5px] text-slate-400 flex items-center gap-1">
-                  {weatherData.precipitation > 0 ? (
-                    <CloudRain className="w-3 h-3 text-sky-300" />
-                  ) : (
-                    <Sun className="w-3 h-3 text-amber-300" />
-                  )}
-                  <span>Kondisi Cuaca</span>
-                </div>
-                <div className="text-xs sm:text-sm font-bold text-white mt-1 truncate">
-                  {weatherData.weatherDesc}
-                </div>
-                <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1 font-mono">
-                  <Wind className="w-3 h-3 text-slate-500" />
-                  <span>{weatherData.windSpeed.toFixed(1)} km/j</span>
-                </div>
-              </div>
-
-              <div className="rounded-lg bg-emerald-950/40 border border-emerald-800/60 p-2.5">
-                <div className="text-[10.5px] text-emerald-300">Indeks Higroskopis</div>
-                <div className="text-xs sm:text-sm font-bold text-emerald-400 mt-1">
-                  {weatherData.hygroIndex.status}
-                </div>
-                <div className="text-[10px] text-emerald-300/70 mt-0.5">
-                  Penguapan: {weatherData.hygroIndex.potensiPenguapan}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-2.5 text-[11px]">
-              <div className="lg:col-span-2 rounded-lg bg-slate-900/80 border border-slate-800 p-3 leading-relaxed text-slate-300">
-                <div className="font-bold text-sky-300 mb-1">
-                  Korelasi Cuaca &amp; Susut Krosok ({activeDateText}):
-                </div>
-                <p>
-                  {weatherData.hygroIndex.analisisKorelasi}
-                  {dailyAnalysis.rows.length > 0 && (
-                    <>
-                      {' '}
-                      Pada evaluasi {activeDateText}, perubahan kadar air/uap tercatat{' '}
-                      <strong className="text-sky-300 font-mono">
-                        {formatNum(Math.abs(dailyAnalysis.totalUapAir))} Kg (
-                        {formatPct(Math.abs(dailyAnalysis.uapAirPctBaku))}% dari baku)
-                      </strong>{' '}
-                      dan pemisahan debu{' '}
-                      <strong className="text-amber-300 font-mono">
-                        {formatNum(dailyAnalysis.totalDebu)} Kg (
-                        {formatPct(dailyAnalysis.debuPctBaku)}%)
-                      </strong>
-                      .
-                    </>
-                  )}
-                </p>
-              </div>
-
-              <div className="rounded-lg bg-slate-900/80 border border-slate-800 p-3 leading-relaxed text-slate-300 flex flex-col justify-between gap-2">
-                <div>
-                  <div className="font-bold text-amber-300 mb-1">
-                    Rekomendasi Kontrol Proses:
-                  </div>
-                  <p>{weatherData.hygroIndex.rekomendasiOperasional}</p>
-                </div>
-                {onNavigateToMonthlyAnalisis && (
-                  <button
-                    type="button"
-                    onClick={onNavigateToMonthlyAnalisis}
-                    className="min-h-[32px] self-start inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[10.5px] font-semibold text-sky-300 transition-colors cursor-pointer"
-                  >
-                    <Sliders className="w-3 h-3" />
-                    <span>Buka Evaluasi Bulanan &amp; Acuan</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="py-4 text-center text-xs text-slate-400">
-            Menghubungkan sensor cuaca aktual PT Batu Karang (Wagir, Malang)...
-          </div>
-        )}
-      </div>
     </div>
   );
 };

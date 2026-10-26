@@ -41,7 +41,10 @@ import {
   loadSignatories,
   saveSignatories
 } from '../services/acuanService';
-import { PP1_FACTORY_LOCATIONS } from '../services/weatherService';
+import {
+  OFFICIAL_FACTORY_ADDRESS,
+  PP1_FACTORY_LOCATIONS
+} from '../services/weatherService';
 
 interface TabAnalisisDeviasiProps {
   records: KrosokRecord[];
@@ -417,28 +420,17 @@ export const TabAnalisisDeviasi: React.FC<TabAnalisisDeviasiProps> = ({
                   Integrasi Mikroklimat Pabrik
                 </span>
                 <span aria-hidden="true">·</span>
-                <select
-                  value={weatherData?.location.id || 'batu-karang-wagir'}
-                  onChange={(e) => {
-                    const loc = PP1_FACTORY_LOCATIONS.find(
-                      (l) => l.id === e.target.value
-                    );
-                    if (loc) onRefreshWeather(loc);
-                  }}
-                  className="bg-slate-800 text-sky-300 border border-slate-700 rounded-md px-2 py-0.5 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-sky-500"
-                >
-                  {PP1_FACTORY_LOCATIONS.map((loc) => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.name}
-                    </option>
-                  ))}
-                </select>
+                <span className="bg-slate-800 text-sky-300 border border-slate-700 rounded-md px-2 py-0.5 text-xs font-semibold">
+                  PT BATU KARANG — Wagir, Kab. Malang (
+                  {(weatherData?.location.lat ?? PP1_FACTORY_LOCATIONS[0].lat).toFixed(4)},{' '}
+                  {(weatherData?.location.lon ?? PP1_FACTORY_LOCATIONS[0].lon).toFixed(4)})
+                </span>
                 <button
                   type="button"
-                  onClick={() => onRefreshWeather(weatherData?.location)}
+                  onClick={() => onRefreshWeather(PP1_FACTORY_LOCATIONS[0])}
                   disabled={weatherLoading}
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[11px] font-medium transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-                  title="Perbarui kondisi cuaca riil lokasi pabrik"
+                  title="Perbarui kondisi cuaca riil lokasi pabrik PT BATU KARANG"
                 >
                   <RefreshCw
                     className={`w-3 h-3 ${weatherLoading ? 'animate-spin text-sky-400' : ''}`}
@@ -447,9 +439,8 @@ export const TabAnalisisDeviasi: React.FC<TabAnalisisDeviasiProps> = ({
                 </button>
               </div>
 
-              <div className="text-xs text-slate-400">
-                {weatherData?.location.address ||
-                  'Jl. Parangargo No.153, Genengan, Parangargo, Kec. Wagir, Kabupaten Malang, Jawa Timur 65158'}
+              <div className="text-xs text-slate-300">
+                {weatherData?.location.address || OFFICIAL_FACTORY_ADDRESS}
               </div>
 
               {weatherData ? (
@@ -1707,8 +1698,7 @@ export const TabAnalisisDeviasi: React.FC<TabAnalisisDeviasiProps> = ({
               UNIT PENGOLAHAN TEMBAKAU KROSOK (SKT &amp; SKM)
             </div>
             <div className="text-[10px] text-slate-600 mt-0.5">
-              Jl. Parangargo No.153, Genengan, Parangargo, Kec. Wagir, Kabupaten
-              Malang, Jawa Timur 65158
+              {OFFICIAL_FACTORY_ADDRESS}
             </div>
           </div>
           <div className="text-right font-mono text-[10px] text-slate-700 shrink-0">

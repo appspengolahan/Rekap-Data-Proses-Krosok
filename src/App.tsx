@@ -36,7 +36,6 @@ import {
 } from './services/acuanService';
 import {
   fetchFactoryWeather,
-  PP1_FACTORY_LOCATIONS,
   setSelectedFactoryLocation
 } from './services/weatherService';
 import { loadSwitchApps, saveSwitchApps } from './data/switchAppDefault';
@@ -103,20 +102,26 @@ export default function App() {
   const [weatherData, setWeatherData] = useState<FactoryWeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState<boolean>(false);
 
-  const refreshFactoryWeather = useCallback(async (locationOverride?: FactoryLocation) => {
-    setWeatherLoading(true);
-    try {
-      if (locationOverride) {
-        setSelectedFactoryLocation(locationOverride.id);
+  const refreshFactoryWeather = useCallback(
+    async (locationOverride?: FactoryLocation, forceRefresh: boolean = false) => {
+      setWeatherLoading(true);
+      try {
+        if (locationOverride) {
+          setSelectedFactoryLocation(locationOverride.id);
+        }
+        const w = await fetchFactoryWeather(
+          locationOverride,
+          forceRefresh || Boolean(locationOverride)
+        );
+        setWeatherData(w);
+      } catch (err) {
+        console.warn('Weather fetch notice:', err);
+      } finally {
+        setWeatherLoading(false);
       }
-      const w = await fetchFactoryWeather(locationOverride, Boolean(locationOverride));
-      setWeatherData(w);
-    } catch (err) {
-      console.warn('Weather fetch notice:', err);
-    } finally {
-      setWeatherLoading(false);
-    }
-  }, []);
+    },
+    []
+  );
 
   const handleApplyBaseline = useCallback(
     (newList: KrosokStandarAcuan[], newMeta: BaselineConfigMeta) => {
@@ -266,13 +271,20 @@ export default function App() {
 
   // Initial Background Sync & Factory Weather Fetch on App Mount
   useEffect(() => {
-    refreshFactoryWeather();
+    refreshFactoryWeather(undefined, false);
     const timer = setTimeout(() => {
       performSync(false);
     }, 300);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Ensure Live Telemetry is ready whenever DHP Modal opens
+  useEffect(() => {
+    if (isDhpModalOpen && !weatherData && !weatherLoading) {
+      refreshFactoryWeather(undefined, false);
+    }
+  }, [isDhpModalOpen, weatherData, weatherLoading, refreshFactoryWeather]);
 
   // AutoSync Background Timer Interval
   useEffect(() => {
@@ -495,7 +507,7 @@ export default function App() {
               batchNotes={batchNotes}
               weatherData={weatherData}
               weatherLoading={weatherLoading}
-              onRefreshWeather={refreshFactoryWeather}
+              onRefreshWeather={(loc) => refreshFactoryWeather(loc, true)}
             />
           )}
 
@@ -588,7 +600,7 @@ export default function App() {
         onSaveBatchNote={handleSaveBatchNote}
         weatherData={weatherData}
         weatherLoading={weatherLoading}
-        onRefreshWeather={() => refreshFactoryWeather(PP1_FACTORY_LOCATIONS[0])}
+        onRefreshWeather={(loc, force) => refreshFactoryWeather(loc, force ?? true)}
         onNavigateToAnalisisTab={() => setActiveTab('analisis_deviasi')}
       />
 
