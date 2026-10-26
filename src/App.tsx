@@ -36,6 +36,7 @@ import {
 } from './services/acuanService';
 import {
   fetchFactoryWeather,
+  PP1_FACTORY_LOCATIONS,
   setSelectedFactoryLocation
 } from './services/weatherService';
 import { loadSwitchApps, saveSwitchApps } from './data/switchAppDefault';
@@ -578,6 +579,7 @@ export default function App() {
         onClose={() => setIsDhpModalOpen(false)}
         config={config}
         dhpItems={dhpItems}
+        rekapRecords={records}
         onRefreshDhp={refreshDhpData}
         onAppendRecordsToRekap={handleAppendRecordsToRekap}
         standarList={standarList}
@@ -585,6 +587,8 @@ export default function App() {
         batchNotes={batchNotes}
         onSaveBatchNote={handleSaveBatchNote}
         weatherData={weatherData}
+        weatherLoading={weatherLoading}
+        onRefreshWeather={() => refreshFactoryWeather(PP1_FACTORY_LOCATIONS[0])}
         onNavigateToAnalisisTab={() => setActiveTab('analisis_deviasi')}
       />
 
