@@ -1331,14 +1331,17 @@ function perbaikiHasilNolDiRekap() {
                                 </div>
                               </div>
                               <div>
-                                <div className="text-[10px] text-slate-500">
-                                  Susut {evalItem ? `(Acuan ${formatPct(evalItem.acuanPct)}%)` : ''}
-                                </div>
-                                <div className="font-mono text-xs font-bold text-rose-700 mt-0.5">
+                                <div className="text-[10px] text-slate-500">Susut</div>
+                                <div className="font-mono text-xs font-bold text-rose-700 mt-0.5 leading-tight">
                                   {item.hasil > 0
                                     ? `${formatNum(item.susutKg)} (${formatPct(item.susutPct)}%)`
                                     : '-'}
                                 </div>
+                                {evalItem && (
+                                  <div className="font-mono text-[10px] text-slate-400 mt-0.5 leading-tight">
+                                    (Acuan {formatPct(evalItem.acuanPct)}%)
+                                  </div>
+                                )}
                               </div>
                             </div>
 
