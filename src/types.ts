@@ -112,6 +112,27 @@ export interface DhpKrosokItem {
   rekapHasil?: number;
 }
 
+export interface RekapRawDateRow {
+  srcRow: number;
+  tanggal: string; // YYYY-MM-DD
+  tanggalDisplay: string;
+  jenisKrosok: string;
+  jenisProses: string;
+  baku: number;
+  hasil: number;
+}
+
+export interface ActiveDateRealizationAudit {
+  activeIsoDate: string;
+  activeDateDisplay: string;
+  dhpActiveCount: number;
+  rekapTotalOnDate: number;
+  emptyTemplateRows: RekapRawDateRow[];
+  cancelledPlanRows: RekapRawDateRow[];
+  protectedOrphanRows: RekapRawDateRow[];
+  purgeableRows: RekapRawDateRow[];
+}
+
 export interface SwitchAppModule {
   id: string;
   title: string;

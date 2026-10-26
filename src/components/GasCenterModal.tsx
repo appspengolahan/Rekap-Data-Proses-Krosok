@@ -159,34 +159,137 @@ function doGet(e) {
 }
 
 function doPost(e) {
+  var lock = LockService.getScriptLock();
+  lock.tryLock(15000);
   try {
     var data = JSON.parse(e.postData.contents);
+    var action = data.action || 'singleAppend';
+
+    // Jika IntegrasiDHP.gs terpasang pada project yang sama, delegasikan rekonsiliasi 2 arah secara presisi
+    if ((action === 'reconcileActiveDate' || action === 'appendDhpRecords') && typeof syncDhpToRekap === 'function') {
+      var syncRes = syncDhpToRekap({ activeDateHint: data.activeIsoDate || '' });
+      return ContentService.createTextOutput(JSON.stringify({ success: true, result: syncRes }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
     var ss = SpreadsheetApp.openById('${formData.spreadsheetId}');
     var sheet = ss.getSheetByName('${formData.sheetName}');
-    
-    // Append row
-    sheet.appendRow([
-      '', // A
-      new Date(data.tanggal), // B
-      data.bulan, // C
-      data.tahun, // D
-      data.jenisKrosok + ' ' + data.jenisProses, // E
-      data.jenisKrosok, // F
-      data.jenisProses, // G
-      data.baku, // H
-      data.hasil, // I
-      data.baku - data.hasil, // J
-      ((data.baku - data.hasil) / data.baku) * 100, // K
-      data.gagangKg || 0, // L
-      data.airKg || 0, // M
-      data.debuKg || 0  // N
-    ]);
+    if (!sheet) {
+      return ContentService.createTextOutput(JSON.stringify({ success: false, error: 'Sheet tidak ditemukan' }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // Rekonsiliasi Tanggal Aktif Mandiri (Bottom-Up Reverse Scan + Fail-Safe Hasil === 0)
+    if (action === 'reconcileActiveDate' && data.activeIsoDate) {
+      var dhpSS = SpreadsheetApp.openById('${formData.dhpSpreadsheetId || '1tyE6QWZOPhjLCsjvesU82QePF5RqEBToJsp1m0qQY_w'}');
+      var dhpSh = dhpSS.getSheetByName('${formData.dhpSheetName || 'INTEGRASI DATA'}');
+      var activePool = [];
+      if (dhpSh) {
+        var dVals = dhpSh.getDataRange().getValues();
+        for (var d = 0; d < dVals.length; d++) {
+          var dTemb = String(dVals[d][3] || '').trim();
+          var dBaku = Number(dVals[d][4]) || 0;
+          if (dTemb && dTemb.toUpperCase() !== 'JENIS TEMBAKAU' && dBaku > 0) {
+            var dTgl = dVals[d][2] instanceof Date
+              ? Utilities.formatDate(dVals[d][2], 'GMT+7', 'yyyy-MM-dd')
+              : String(dVals[d][2] || '');
+            if (dTgl === data.activeIsoDate) {
+              activePool.push({ norm: dTemb.toLowerCase().trim(), baku: dBaku });
+            }
+          }
+        }
+      }
+
+      var maxR = sheet.getLastRow();
+      var purged = 0;
+      if (maxR >= 12) {
+        var rVals = sheet.getRange(12, 2, maxR - 11, 8).getValues();
+        var candidates = [];
+        var poolCopy = activePool.slice();
+        for (var r = 0; r < rVals.length; r++) {
+          var rTgl = rVals[r][0];
+          if (!rTgl) continue;
+          var rIso = rTgl instanceof Date
+            ? Utilities.formatDate(rTgl, 'GMT+7', 'yyyy-MM-dd')
+            : String(rTgl);
+          if (rIso !== data.activeIsoDate) continue;
+          var rName = String(rVals[r][4] || '').trim().toLowerCase();
+          var rBaku = Number(rVals[r][6]) || 0;
+          var rHasil = Number(rVals[r][7]) || 0;
+          var pIdx = -1;
+          for (var p = 0; p < poolCopy.length; p++) {
+            if (poolCopy[p].norm === rName && (Math.abs(poolCopy[p].baku - rBaku) < 0.5 || rHasil <= 0)) {
+              pIdx = p;
+              break;
+            }
+          }
+          var isMatched = pIdx !== -1;
+          if (isMatched) poolCopy.splice(pIdx, 1);
+          candidates.push({ rowNum: 12 + r, rBaku: rBaku, rHasil: rHasil, matched: isMatched });
+        }
+
+        // Penelusuran Bawah-ke-Atas (Bottom-Up) + Fail-Safe Mutlak rHasil === 0
+        for (var k = candidates.length - 1; k >= 0; k--) {
+          var cItem = candidates[k];
+          if (cItem.rHasil > 0) continue; // Fail-Safe: Hasil > 0 tidak pernah dihapus
+          if (!cItem.matched) {
+            if (cItem.rowNum === 12 && sheet.getLastRow() <= 12) {
+              sheet.getRange(12, 2).clearContent();
+              sheet.getRange(12, 6, 1, 4).clearContent();
+              sheet.getRange(12, 12, 1, 3).clearContent();
+            } else {
+              sheet.deleteRow(cItem.rowNum);
+            }
+            purged++;
+          }
+        }
+      }
+      return ContentService.createTextOutput(JSON.stringify({ success: true, purged: purged }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // Input baris baru dengan proteksi penuh formula Kolom C, D, E, J, K
+    var items = Array.isArray(data.records) ? data.records : [data];
+    var lastRow = sheet.getLastRow();
+    var targetRow = Math.max(11, lastRow);
+    for (var idx = 0; idx < items.length; idx++) {
+      var rec = items[idx];
+      if (!rec.baku || Number(rec.hasil) <= 0) continue;
+      targetRow++;
+      sheet.getRange(targetRow, 2).setValue(new Date(rec.tanggal));
+      sheet.getRange(targetRow, 6).setValue(rec.jenisKrosok);
+      sheet.getRange(targetRow, 7).setValue(rec.jenisProses || 'SKT');
+      sheet.getRange(targetRow, 8).setValue(Number(rec.baku));
+      sheet.getRange(targetRow, 9).setValue(Number(rec.hasil));
+      sheet.getRange(targetRow, 12).setValue(Number(rec.gagangKg) || 0);
+      sheet.getRange(targetRow, 13).setValue(Number(rec.airKg) || 0);
+      sheet.getRange(targetRow, 14).setValue(Number(rec.debuKg) || 0);
+
+      if (targetRow > 12) {
+        if (!sheet.getRange(targetRow, 3).getFormula()) {
+          sheet.getRange(targetRow - 1, 3, 1, 3).copyTo(
+            sheet.getRange(targetRow, 3, 1, 3),
+            SpreadsheetApp.CopyPasteType.PASTE_FORMULA,
+            false
+          );
+        }
+        if (!sheet.getRange(targetRow, 10).getFormula()) {
+          sheet.getRange(targetRow - 1, 10, 1, 2).copyTo(
+            sheet.getRange(targetRow, 10, 1, 2),
+            SpreadsheetApp.CopyPasteType.PASTE_FORMULA,
+            false
+          );
+        }
+      }
+    }
 
     return ContentService.createTextOutput(JSON.stringify({ success: true }))
       .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.message }))
       .setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
   }
 }`;
 

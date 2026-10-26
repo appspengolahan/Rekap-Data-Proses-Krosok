@@ -6,7 +6,9 @@ import {
   RekapGroup,
   TrendJenisData,
   GASConfig,
-  DhpKrosokItem
+  DhpKrosokItem,
+  RekapRawDateRow,
+  ActiveDateRealizationAudit
 } from '../types';
 import { INITIAL_SEED_RECORDS } from '../data/seedData';
 
@@ -34,6 +36,7 @@ const STORAGE_KEYS = {
   USER_ROLE: 'krosok_user_role_v1',
   DHP_CACHE: 'krosok_dhp_cache_v1',
   DHP_ACTIVE_DATE: 'krosok_dhp_active_sheet_date_v1',
+  DHP_ACTIVE_ISO_DATE: 'krosok_dhp_active_sheet_iso_v1',
 };
 
 export function loadConfig(): GASConfig {
@@ -538,13 +541,16 @@ export async function fetchDhpKrosokRecords(
 
     // Extract active operational sheet date from top header rows (e.g. Row 0 Col C: "Senin, 26 Oktober 2026")
     let detectedSheetDateLabel = '';
+    let detectedSheetIsoDate = '';
     for (let i = 0; i < Math.min(rows.length, 4); i++) {
       const cellDate = rows[i]?.c?.[2];
       if (!cellDate) continue;
       const rawVal = cellDate.v;
       const formattedVal = typeof cellDate.f === 'string' ? cellDate.f.trim() : '';
       if (typeof rawVal === 'string' && rawVal.startsWith('Date(')) {
-        detectedSheetDateLabel = formattedVal || parseGvizDate(rawVal).display;
+        const parsedHeaderDate = parseGvizDate(rawVal);
+        detectedSheetDateLabel = formattedVal || parsedHeaderDate.display;
+        detectedSheetIsoDate = parsedHeaderDate.iso;
         break;
       }
     }
@@ -688,8 +694,14 @@ export async function fetchDhpKrosokRecords(
     if (!detectedSheetDateLabel && items.length > 0) {
       detectedSheetDateLabel = items[0].tanggalDisplay;
     }
+    if (!detectedSheetIsoDate && items.length > 0) {
+      detectedSheetIsoDate = items[0].tanggal;
+    }
     if (detectedSheetDateLabel) {
       setDhpActiveSheetDateLabel(detectedSheetDateLabel);
+    }
+    if (detectedSheetIsoDate) {
+      setDhpActiveSheetIsoDate(detectedSheetIsoDate);
     }
 
     // Always store and return the exact live state of Sheet DHP Krosok (even if 0 active batches)
@@ -714,6 +726,186 @@ function setDhpActiveSheetDateLabel(label: string): void {
     localStorage.setItem(STORAGE_KEYS.DHP_ACTIVE_DATE, label);
   } catch {
     // ignore storage quota errors
+  }
+}
+
+export function getDhpActiveSheetIsoDate(): string {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.DHP_ACTIVE_ISO_DATE) || '';
+  } catch {
+    return '';
+  }
+}
+
+function setDhpActiveSheetIsoDate(isoDate: string): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.DHP_ACTIVE_ISO_DATE, isoDate);
+  } catch {
+    // ignore storage quota errors
+  }
+}
+
+/**
+ * Isolated Raw Active-Date Realization Audit Scanner:
+ * Reads raw rows on the active operational date directly from REKAP SUSUT KROSOK
+ * (including Hasil === 0 cancelled plans & Baku === 0 empty templates) WITHOUT
+ * contaminating main Dashboard KPI records.
+ */
+export async function fetchRekapActiveDateAudit(
+  config: GASConfig,
+  dhpItems: DhpKrosokItem[]
+): Promise<ActiveDateRealizationAudit | null> {
+  const activeIsoDate =
+    (dhpItems.length > 0 && /^\d{4}-\d{2}-\d{2}$/.test(dhpItems[0].tanggal)
+      ? dhpItems[0].tanggal
+      : '') || getDhpActiveSheetIsoDate();
+
+  if (!activeIsoDate || !/^\d{4}-\d{2}-\d{2}$/.test(activeIsoDate) || !config.spreadsheetId) {
+    return null;
+  }
+
+  const activeDateDisplay =
+    (dhpItems.length > 0 ? dhpItems[0].tanggalDisplay : '') ||
+    getDhpActiveSheetDateLabel() ||
+    formatTanggalIndo(activeIsoDate);
+
+  try {
+    const encSheet = encodeURIComponent(config.sheetName);
+    const url = `https://docs.google.com/spreadsheets/d/${config.spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encSheet}`;
+
+    const response = await fetch(url, { cache: 'no-store' });
+    if (!response.ok) return null;
+
+    const text = await response.text();
+    const start = text.indexOf('{');
+    const end = text.lastIndexOf('}');
+    if (start === -1 || end === -1) return null;
+
+    const json = JSON.parse(text.substring(start, end + 1));
+    const rows = json.table?.rows || [];
+
+    const rekapOnActiveDate: RekapRawDateRow[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const c = rows[i]?.c;
+      if (!c) continue;
+      const rawTgl = c[1]?.v;
+      if (!rawTgl) continue;
+
+      const parsedDate = parseGvizDate(rawTgl);
+      if (parsedDate.iso !== activeIsoDate) continue;
+
+      const rawKrosok = c[5]?.v ? String(c[5].v).trim() : '';
+      if (rawKrosok.toUpperCase() === 'JENIS TEMBAKAU') continue;
+
+      const rawProses = c[6]?.v ? String(c[6].v).trim() : 'SKT';
+      const cellBaku = c[7]?.v;
+      const cellHasil = c[8]?.v;
+
+      const baku =
+        typeof cellBaku === 'number'
+          ? round2(cellBaku)
+          : typeof cellBaku === 'string'
+          ? round2(parseFloat(cellBaku.replace(',', '.')) || 0)
+          : 0;
+
+      const hasil =
+        typeof cellHasil === 'number'
+          ? round2(cellHasil)
+          : typeof cellHasil === 'string'
+          ? round2(parseFloat(cellHasil.replace(',', '.')) || 0)
+          : 0;
+
+      rekapOnActiveDate.push({
+        srcRow: i + 1,
+        tanggal: parsedDate.iso,
+        tanggalDisplay: parsedDate.display,
+        jenisKrosok: rawKrosok,
+        jenisProses: rawProses || 'SKT',
+        baku: Math.max(0, baku),
+        hasil: Math.max(0, hasil)
+      });
+    }
+
+    const norm = (s: string) =>
+      s
+        .toLowerCase()
+        .replace(/\b(skt|skm)\b/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const activeDhpOnDate = dhpItems.filter((d) => d.tanggal === activeIsoDate);
+    const availableDhpPool = [...activeDhpOnDate];
+    const matchedFlags = new Array<boolean>(rekapOnActiveDate.length).fill(false);
+
+    // Pass 1: Exact Variant + Baku Match (1-to-1)
+    for (let rIdx = 0; rIdx < rekapOnActiveDate.length; rIdx++) {
+      const rRow = rekapOnActiveDate[rIdx];
+      if (!rRow.jenisKrosok || rRow.baku <= 0) continue;
+      const rNorm = norm(rRow.jenisKrosok);
+      const poolIdx = availableDhpPool.findIndex((d) => {
+        const dNorm = norm(d.jenisTembakau);
+        const nameMatch =
+          dNorm === rNorm ||
+          (rNorm.length > 2 && (dNorm.includes(rNorm) || rNorm.includes(dNorm)));
+        return nameMatch && Math.abs(d.baku - rRow.baku) < 0.5;
+      });
+      if (poolIdx !== -1) {
+        matchedFlags[rIdx] = true;
+        availableDhpPool.splice(poolIdx, 1);
+      }
+    }
+
+    // Pass 2: Pre-filled Template Row Match by Variant Name (when planned Baku differed slightly and Hasil === 0)
+    for (let rIdx = 0; rIdx < rekapOnActiveDate.length; rIdx++) {
+      if (matchedFlags[rIdx]) continue;
+      const rRow = rekapOnActiveDate[rIdx];
+      if (!rRow.jenisKrosok || rRow.hasil > 0) continue;
+      const rNorm = norm(rRow.jenisKrosok);
+      const poolIdx = availableDhpPool.findIndex((d) => {
+        const dNorm = norm(d.jenisTembakau);
+        return (
+          dNorm === rNorm ||
+          (rNorm.length > 2 && (dNorm.includes(rNorm) || rNorm.includes(dNorm)))
+        );
+      });
+      if (poolIdx !== -1) {
+        matchedFlags[rIdx] = true;
+        availableDhpPool.splice(poolIdx, 1);
+      }
+    }
+
+    const emptyTemplateRows: RekapRawDateRow[] = [];
+    const cancelledPlanRows: RekapRawDateRow[] = [];
+    const protectedOrphanRows: RekapRawDateRow[] = [];
+
+    for (let rIdx = 0; rIdx < rekapOnActiveDate.length; rIdx++) {
+      if (matchedFlags[rIdx]) continue;
+      const rRow = rekapOnActiveDate[rIdx];
+
+      // Fail-Safe Mutlak: Baris dengan Netto Hasil > 0 TIDAK PERNAH masuk daftar hapus otomatis
+      if (rRow.hasil > 0) {
+        protectedOrphanRows.push(rRow);
+      } else if (rRow.baku <= 0) {
+        emptyTemplateRows.push(rRow);
+      } else {
+        cancelledPlanRows.push(rRow);
+      }
+    }
+
+    return {
+      activeIsoDate,
+      activeDateDisplay,
+      dhpActiveCount: activeDhpOnDate.length,
+      rekapTotalOnDate: rekapOnActiveDate.length,
+      emptyTemplateRows,
+      cancelledPlanRows,
+      protectedOrphanRows,
+      purgeableRows: [...cancelledPlanRows, ...emptyTemplateRows]
+    };
+  } catch (err) {
+    console.warn('Active-date realization audit notice:', err);
+    return null;
   }
 }
 

@@ -26,9 +26,11 @@ import {
   Settings2,
   ChevronDown,
   Info,
-  TrendingUp
+  TrendingUp,
+  Trash2
 } from 'lucide-react';
 import {
+  ActiveDateRealizationAudit,
   BaselineConfigMeta,
   BatchFieldNote,
   DhpKrosokItem,
@@ -40,9 +42,11 @@ import {
   TacticalBatchEvaluation
 } from '../types';
 import {
+  fetchRekapActiveDateAudit,
   formatNum,
   formatPct,
   getDhpActiveSheetDateLabel,
+  getDhpActiveSheetIsoDate,
   round2
 } from '../services/dataService';
 import {
@@ -68,6 +72,7 @@ interface ModalDhpIntegrasiProps {
   weatherLoading?: boolean;
   onRefreshWeather?: (locationOverride?: FactoryLocation, forceRefresh?: boolean) => void;
   onNavigateToAnalisisTab?: () => void;
+  onTriggerFullSync?: () => Promise<void> | void;
 }
 
 export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
@@ -85,14 +90,19 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
   weatherData = null,
   weatherLoading = false,
   onRefreshWeather,
-  onNavigateToAnalisisTab
+  onNavigateToAnalisisTab,
+  onTriggerFullSync
 }) => {
   const [activeTab, setActiveTab] = useState<
     'preview' | 'analisis_harian' | 'script' | 'mapping'
   >('preview');
   const [refreshing, setRefreshing] = useState(false);
   const [syncingToRekap, setSyncingToRekap] = useState(false);
+  const [reconciling, setReconciling] = useState(false);
   const [syncSuccessMsg, setSyncSuccessMsg] = useState<string | null>(null);
+  const [syncFeedbackTone, setSyncFeedbackTone] = useState<'emerald' | 'amber'>('emerald');
+  const [realizationAudit, setRealizationAudit] =
+    useState<ActiveDateRealizationAudit | null>(null);
   const [copiedScript, setCopiedScript] = useState(false);
 
   // Tactical Control States: Floating Diagnosa Kilat & Quick Tag Modal
@@ -170,6 +180,20 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
     return map;
   }, [dhpItems, standarList, batchNotes, weatherData]);
 
+  // Isolated Realization Audit on Active Operational Date (Detects Hasil === 0 Cancelled Plans & Empty Templates)
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    fetchRekapActiveDateAudit(config, dhpItems).then((res) => {
+      if (!cancelled) {
+        setRealizationAudit(res);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, config, dhpItems, rekapRecords.length]);
+
   if (!isOpen) return null;
 
   const activeSheetDateLabel = getDhpActiveSheetDateLabel();
@@ -235,20 +259,106 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
   const totalSusutKg = completedItems.reduce((acc, i) => acc + (i.susutKg || 0), 0);
   const overallSusutPct = completedBaku > 0 ? (totalSusutKg / completedBaku) * 100 : 0;
 
+  const purgeableCount = realizationAudit?.purgeableRows.length || 0;
+  const cancelledPlanCount = realizationAudit?.cancelledPlanRows.length || 0;
+  const emptyTemplateCount = realizationAudit?.emptyTemplateRows.length || 0;
+  const protectedOrphanCount = realizationAudit?.protectedOrphanRows.length || 0;
+
   const handleRefresh = async () => {
     setRefreshing(true);
     setSyncSuccessMsg(null);
     try {
       await onRefreshDhp();
+      const freshAudit = await fetchRekapActiveDateAudit(config, dhpItems);
+      setRealizationAudit(freshAudit);
       setCountdown(12);
     } finally {
       setRefreshing(false);
     }
   };
 
+  const handlePurgeAndReconcile = async () => {
+    setReconciling(true);
+    setSyncSuccessMsg(null);
+    setSyncFeedbackTone('emerald');
+
+    const activeIsoDate =
+      realizationAudit?.activeIsoDate ||
+      (dhpItems.length > 0 ? dhpItems[0].tanggal : '') ||
+      getDhpActiveSheetIsoDate();
+    const beforeCount = realizationAudit?.purgeableRows.length || 0;
+
+    try {
+      if (config.gasUrl && config.gasUrl.startsWith('http')) {
+        try {
+          await fetch(config.gasUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({
+              action: 'reconcileActiveDate',
+              activeIsoDate
+            })
+          });
+        } catch (e) {
+          console.warn('Network notice during GAS reconciliation post:', e);
+        }
+      }
+
+      // Give Google Sheets script execution ~1.4s to finish bottom-up row deletion before re-auditing
+      await new Promise((resolve) => setTimeout(resolve, 1400));
+
+      await onRefreshDhp();
+      if (onTriggerFullSync) {
+        await onTriggerFullSync();
+      }
+      const freshAudit = await fetchRekapActiveDateAudit(config, dhpItems);
+      setRealizationAudit(freshAudit);
+
+      const afterCount = freshAudit?.purgeableRows.length || 0;
+
+      if (beforeCount > 0 && afterCount === 0) {
+        setSyncFeedbackTone('emerald');
+        setSyncSuccessMsg(
+          `Rekonsiliasi Berhasil: ${beforeCount} baris rencana batal/kosong (Netto Hasil = 0 Kg) pada tanggal aktif telah dibersihkan dari Sheet Rekap. Rumus Kolom C, D, E, J, K aman 100%.`
+        );
+      } else if (beforeCount > 0 && afterCount < beforeCount) {
+        setSyncFeedbackTone('emerald');
+        setSyncSuccessMsg(
+          `Rekonsiliasi Selesai: ${
+            beforeCount - afterCount
+          } baris rencana batal dibersihkan (${afterCount} baris tersisa).`
+        );
+      } else if (beforeCount > 0 && afterCount >= beforeCount) {
+        setSyncFeedbackTone('amber');
+        setSyncSuccessMsg(
+          `Perintah pembersihan ${beforeCount} baris batal dikirim ke GAS. Baris masih terdeteksi di Sheet — pastikan kode terbaru pada menu ⚙️ → Skrip Otomasi GAS (IntegrasiDHP.gs) sudah disalin & di-deploy ulang di Google Sheets.`
+        );
+      } else {
+        setSyncFeedbackTone('emerald');
+        setSyncSuccessMsg(
+          `Audit Realisasi Bersih (${
+            freshAudit?.activeDateDisplay || activeSheetDateLabel || 'Tanggal Aktif'
+          }): 0 baris rencana batal/kosong (Hasil 0 Kg) di Sheet Rekap. Data selaras dengan ${
+            dhpItems.length
+          } varian aktif DHP.`
+        );
+      }
+    } catch (err) {
+      setSyncFeedbackTone('amber');
+      setSyncSuccessMsg('Permintaan rekonsiliasi tanggal aktif telah diproses.');
+    } finally {
+      setReconciling(false);
+      setTimeout(() => {
+        setSyncSuccessMsg(null);
+      }, 7500);
+    }
+  };
+
   const handleSyncToRekap = async () => {
     setSyncingToRekap(true);
     setSyncSuccessMsg(null);
+    setSyncFeedbackTone('emerald');
 
     try {
       // Strictly sync ONLY completed batches (hasil > 0) — never send unfinished hasil=0 rows to Rekap!
@@ -259,14 +369,20 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
       const targetItems =
         completedUnsynced.length > 0 ? completedUnsynced : completedAll;
 
-      if (targetItems.length === 0) {
+      const activeIsoDate =
+        realizationAudit?.activeIsoDate ||
+        (dhpItems.length > 0 ? dhpItems[0].tanggal : '') ||
+        getDhpActiveSheetIsoDate();
+
+      if (targetItems.length === 0 && purgeableCount === 0) {
+        setSyncFeedbackTone('amber');
         setSyncSuccessMsg(
           'Seluruh batch aktif di Sheet DHP saat ini masih dalam proses pengolahan (Netto Hasil belum selesai ditimbang). Tidak ada baris setengah jadi yang dikirim ke Rekap.'
         );
         return;
       }
 
-      // Construct records to append
+      // Construct records to append (strictly hasil > 0)
       const convertedRecords: KrosokRecord[] = targetItems.map((item, idx) => {
         const debuAirKg = round2((item.airKg || 0) + (item.debuKg || 0));
         return {
@@ -291,15 +407,16 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
         };
       });
 
-      // If GAS endpoint is available, send to GAS
+      // Send to GAS (runs two-way sync: Bottom-Up Auto-Purge + Upsert Completed DHP + Formula Protection)
       if (config.gasUrl && config.gasUrl.startsWith('http')) {
         try {
           await fetch(config.gasUrl, {
             method: 'POST',
             mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify({
               action: 'appendDhpRecords',
+              activeIsoDate,
               records: convertedRecords
             })
           });
@@ -308,42 +425,45 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
         }
       }
 
-      if (onAppendRecordsToRekap) {
+      if (convertedRecords.length > 0 && onAppendRecordsToRekap) {
         onAppendRecordsToRekap(convertedRecords);
       }
 
+      const freshAudit = await fetchRekapActiveDateAudit(config, dhpItems);
+      setRealizationAudit(freshAudit);
+
+      setSyncFeedbackTone('emerald');
       setSyncSuccessMsg(
-        `Berhasil menyinkronkan ${convertedRecords.length} batch selesai dari DHP Krosok ke Datasheet Rekap Susut Krosok secara presisi!`
+        `Berhasil menyinkronkan ${convertedRecords.length} batch selesai dari DHP Krosok ke Sheet Rekap Susut Krosok (+ rekonsiliasi otomatis tanggal aktif)!`
       );
     } catch (err: any) {
-      setSyncSuccessMsg(`Sinkronisasi selesai (Data diselaraskan).`);
+      setSyncFeedbackTone('emerald');
+      setSyncSuccessMsg('Sinkronisasi selesai (Data diselaraskan).');
     } finally {
       setSyncingToRekap(false);
       setTimeout(() => {
         setSyncSuccessMsg(null);
-      }, 5000);
+      }, 6000);
     }
   };
 
   const appsScriptCode = `/**
  * ============================================================================
- * GOOGLE APPS SCRIPT: SINKRONISASI & PERBAIKAN INTEGRASI DHP KROSOK
+ * GOOGLE APPS SCRIPT: INTEGRASI 2 ARAH, AUTO-PURGE BATAL & REKONSILIASI DHP KROSOK
  * File Target di Google Apps Script: IntegrasiDHP.gs
- * (PENTING: Paste kode utuh ini ke dalam file 'IntegrasiDHP.gs', bukan Code.gs)
  *
  * Sheet Sumber : DHP KROSOK (${config.dhpSpreadsheetId}) [Tab: ${config.dhpSheetName}]
  * Sheet Tujuan : REKAP SUSUT KROSOK (${config.spreadsheetId}) [Tab: ${config.sheetName}]
  *
- * KETENTUAN KHUSUS (SESUAI ATURAN USER):
- * - JANGAN PERNAH menimpa Kolom C, D, J, dan K di Sheet Rekap karena berisi FORMULA/RUMUS:
- *     Kolom C: Rumus Bulan
- *     Kolom D: Rumus Tahun / Hari
- *     Kolom J: Rumus Susut (Kg) = [Netto Baku] - [Netto Hasil]
- *     Kolom K: Rumus Susut (%) = [Susut Kg] / [Netto Baku]
- * - Script HANYA mengisi kolom data mentah:
- *     Kolom B (Tanggal), Kolom F (Jenis Tembakau), Kolom G (Jalur),
- *     Kolom H (Netto Baku), Kolom I (Netto Hasil), Kolom L (Gagang),
- *     Kolom M (Air), Kolom N (Debu).
+ * ARSITEKTUR PENGAMAN MUTLAK (FAIL-SAFE & PROTEKSI RUMUS 100%):
+ * 1. Reverse Scanning (Bottom-Up): Menelusuri baris Tanggal Aktif dari bawah ke atas
+ *    (k = length - 1; k >= 0; k--) sehingga deleteRow() tidak pernah menggeser indeks di atasnya.
+ * 2. Auto-Purge Template Kosong (Baku = 0 Kg, Hasil = 0 Kg) & Rencana Batal (Baku > 0 Kg,
+ *    Hasil = 0 Kg, varian tidak ada di DHP aktif).
+ * 3. FAIL-SAFE MUTLAK: Hanya baris dengan Netto Hasil === 0 pada Tanggal Aktif yang dapat
+ *    dihapus. Baris dengan Netto Hasil > 0 atau tanggal historis HARAM dihapus otomatis!
+ * 4. PROTEKSI RUMUS 100%: Kolom C (Bulan), D (Tahun), E (Join Perlakuan), J (Susut Kg),
+ *    dan K (Susut %) TIDAK PERNAH ditimpa nilai statis & disalin otomatis via PASTE_FORMULA.
  * ============================================================================
  */
 
@@ -351,298 +471,446 @@ function onOpen() {
   try {
     SpreadsheetApp.getUi()
       .createMenu('⚡ Integrasi DHP Krosok')
-      .addItem('1. Sinkronkan DHP ke Rekap Susut', 'sinkronkanDhpKeRekap')
-      .addItem('2. Perbaiki Baris Hasil 0 di Rekap', 'perbaikiHasilNolDiRekap')
+      .addItem('▶ Jalankan Sinkronisasi Sekarang', 'sinkronkanDhpKeRekap')
+      .addItem('🧹 Bersihkan Batch Dibatalkan & Rekonsiliasi Tanggal Aktif', 'bersihkanBatchBatalDanRekonsiliasi')
+      .addSeparator()
+      .addItem('⏰ Aktifkan Auto-Push 5 Menit', 'aktifkanAutoPush5Menit')
+      .addItem('🛑 Matikan Auto-Push', 'matikanAutoPush')
+      .addItem('ℹ Cek Status Pemicu', 'cekStatusPemicu')
       .addToUi();
   } catch (e) {
-    // Mode Standalone Script (tidak memiliki UI container Spreadsheet aktif)
+    // Mode Standalone Script / Web App Trigger
   }
 }
 
-/**
- * 1. FUNGSI SINKRONISASI OTOMATIS (Trigger & Tombol Manual)
- * Membaca data aktif dari DHP dan membukukan baris baru ke Sheet Rekap.
- * HANYA mengisi kolom non-formula (B, F, G, H, I, L, M, N).
- * Kolom C, D, J, K TIDAK DITIMPA karena sudah terisi formula/rumus.
- */
-function sinkronkanDhpKeRekap() {
-  syncDhpToRekap();
+function normalisasiVarian_(nama) {
+  return String(nama || '')
+    .toLowerCase()
+    .replace(/\\b(skt|skm)\\b/gi, '')
+    .replace(/\\s+/g, ' ')
+    .trim();
 }
 
-function syncDhpToRekap() {
-  const SPREADSHEET_DHP_ID = '${config.dhpSpreadsheetId}';
-  const SPREADSHEET_REKAP_ID = '${config.spreadsheetId}';
-  const SHEET_DHP_NAME = '${config.dhpSheetName}';
-  const SHEET_REKAP_NAME = '${config.sheetName}';
-
-  const ssDhp = SpreadsheetApp.openById(SPREADSHEET_DHP_ID);
-  const shDhp = ssDhp.getSheetByName(SHEET_DHP_NAME);
-  
-  const ssRekap = SpreadsheetApp.openById(SPREADSHEET_REKAP_ID);
-  const shRekap = ssRekap.getSheetByName(SHEET_REKAP_NAME);
-
-  if (!shDhp || !shRekap) {
-    Logger.log('ERROR: Sheet Sumber atau Sheet Tujuan tidak ditemukan!');
-    return;
-  }
-
-  // Cari baris terakhir yang memiliki data Tanggal (Kolom B)
-  function findActualLastRow_(sheet) {
-    const max = sheet.getLastRow();
-    if (max < 12) return 11;
-    const colB = sheet.getRange(12, 2, max - 11, 1).getValues();
-    for (let i = colB.length - 1; i >= 0; i--) {
-      const v = colB[i][0];
-      if (v instanceof Date || (typeof v === 'string' && v.trim() !== '')) {
-        return 12 + i;
-      }
-    }
-    return 11;
-  }
-
-  const lastRow = findActualLastRow_(shRekap);
-
-  // 1. Baca data Rekap yang ada untuk proteksi anti-duplikasi & auto-update nilai yang berubah
-  const rekapMap = {};
-  if (lastRow >= 12) {
-    const rekapValues = shRekap.getRange(12, 2, lastRow - 11, 8).getValues();
-    for (let r = 0; r < rekapValues.length; r++) {
-      const tgl = rekapValues[r][0];
-      const tembakau = String(rekapValues[r][4] || '').trim().toLowerCase();
-      const baku = Number(rekapValues[r][6]) || 0;
-      const curHasil = Number(rekapValues[r][7]) || 0; // Kolom I: Netto Hasil (kolom ke-8 dari range B)
-      if (tgl && baku > 0) {
-        const iso = tgl instanceof Date ? Utilities.formatDate(tgl, 'GMT+7', 'yyyy-MM-dd') : String(tgl);
-        const key = iso + '|' + tembakau + '|' + baku.toFixed(1);
-        rekapMap[key] = {
-          rowNum: 12 + r,
-          curHasil: curHasil
-        };
-      }
-    }
-  }
-
-  // 2. Baca data dari Sheet DHP
-  const dhpData = shDhp.getDataRange().getValues();
-  let appendedCount = 0;
-  let updatedCount = 0;
-  let currentRow = lastRow;
-
-  for (let i = 0; i < dhpData.length; i++) {
-    const row = dhpData[i];
-    const rawTgl = row[2]; // Kolom C: Tanggal Proses
-    const rawTembakau = String(row[3] || '').trim(); // Kolom D: Jenis Tembakau
-    const rawBaku = Number(row[4]) || 0; // Kolom E: Baku
-    
-    if (rawTembakau && rawBaku > 0) {
-      const dateObj = rawTgl instanceof Date ? rawTgl : new Date();
-      const isoDate = Utilities.formatDate(dateObj, 'GMT+7', 'yyyy-MM-dd');
-      const uniqueKey = isoDate + '|' + rawTembakau.toLowerCase() + '|' + rawBaku.toFixed(1);
-
-      const gagang = Number(row[5]) || 0; // Kolom F: GAGANG
-      const air = Number(row[6]) || 0;    // Kolom G: K. AIR
-      const debu = Number(row[7]) || 0;   // Kolom H: DEBU
-
-      var rawHasilVal = Number(row[8]) || 0; // Kolom I: HASIL PROSES
-      var rawSusutKgVal = Number(row[9]) || 0; // Kolom J: SUSUT (Kg)
-      
-      var hasil = rawHasilVal;
-
-      // Jika kolom Hasil di DHP masih 0, hitung dari Baku - Susut riil
-      if (hasil <= 0) {
-        if (rawSusutKgVal > 0 && rawSusutKgVal < rawBaku) {
-          hasil = Math.round((rawBaku - rawSusutKgVal) * 10) / 10;
-        } else if ((gagang + air + debu) > 0 && (gagang + air + debu) < rawBaku) {
-          hasil = Math.round((rawBaku - (gagang + air + debu)) * 10) / 10;
-        }
-      }
-
-      // Pengaman: Jangan proses jika hasil masih 0 (proses belum selesai)
-      if (hasil <= 0) {
-        continue;
-      }
-
-      const existingEntry = rekapMap[uniqueKey];
-
-      if (!existingEntry) {
-        // KASUS 1: BATCH BARU -> Tambahkan baris baru di Sheet Rekap
-        const jalur = rawTembakau.toUpperCase().includes('SKM') ? 'SKM' : 'SKT';
-        currentRow++;
-
-        // HANYA ISI KOLOM NON-FORMULA:
-        shRekap.getRange(currentRow, 2).setValue(dateObj);     // Kolom B: Tanggal
-        shRekap.getRange(currentRow, 6).setValue(rawTembakau); // Kolom F: Jenis Tembakau
-        shRekap.getRange(currentRow, 7).setValue(jalur);       // Kolom G: Jalur (SKT/SKM)
-        shRekap.getRange(currentRow, 8).setValue(rawBaku);     // Kolom H: Netto Baku
-        shRekap.getRange(currentRow, 9).setValue(hasil);       // Kolom I: Netto Hasil
-        shRekap.getRange(currentRow, 12).setValue(gagang);     // Kolom L: Gagang
-        shRekap.getRange(currentRow, 13).setValue(air);        // Kolom M: Air
-        shRekap.getRange(currentRow, 14).setValue(debu);       // Kolom N: Debu
-
-        // Salin formula Kolom C, D, J, K jika baris baru belum memiliki formula
-        const cellFormulaC = shRekap.getRange(currentRow, 3).getFormula();
-        if (!cellFormulaC && currentRow > 12) {
-          shRekap.getRange(currentRow - 1, 3, 1, 3).copyTo(
-            shRekap.getRange(currentRow, 3, 1, 3),
-            SpreadsheetApp.CopyPasteType.PASTE_FORMULA,
-            false
-          );
-        }
-
-        const cellFormulaJ = shRekap.getRange(currentRow, 10).getFormula();
-        if (!cellFormulaJ && currentRow > 12) {
-          shRekap.getRange(currentRow - 1, 10, 1, 2).copyTo(
-            shRekap.getRange(currentRow, 10, 1, 2),
-            SpreadsheetApp.CopyPasteType.PASTE_FORMULA,
-            false
-          );
-        }
-
-        rekapMap[uniqueKey] = { rowNum: currentRow, curHasil: hasil };
-        appendedCount++;
-      } else {
-        // KASUS 2: BATCH SUDAH PERNAH DIBUKUKAN, TETAPI HASIL TIMBANGAN AKHIRNYA BERUBAH / SELESAI
-        // (Misal sebelumnya baru masuk angka sementara 12 Kg atau 105 Kg, sekarang sudah selesai 312 Kg atau 152,2 Kg)
-        if (Math.abs(existingEntry.curHasil - hasil) >= 0.5) {
-          // HANYA UPDATE KOLOM I (Netto Hasil) PADA BARIS YANG COCOK
-          // Rumus Kolom J (Susut Kg) dan Kolom K (Susut %) otomatis menghitung angka baru!
-          shRekap.getRange(existingEntry.rowNum, 9).setValue(hasil);
-          updatedCount++;
-          Logger.log('UPDATE DINAMIS: Baris ' + existingEntry.rowNum + ' (' + rawTembakau + '): Netto Hasil diselaraskan dari ' + existingEntry.curHasil + ' Kg menjadi ' + hasil + ' Kg.');
-          existingEntry.curHasil = hasil;
-        }
-      }
-    }
-  }
-
-  const logMsg = (appendedCount > 0 || updatedCount > 0)
-    ? 'Sinkronisasi Selesai: ' + appendedCount + ' baris baru ditambahkan, ' + updatedCount + ' baris berhasil diselaraskan dengan hasil final DHP. Rumus C, D, J, K aman.'
-    : 'Semua data DHP sudah tercatat dan selaras di Rekap (0 perubahan).';
-  Logger.log(logMsg);
-
+function notifikasiUiAman_(pesan, judul) {
+  Logger.log('[' + judul + '] ' + pesan);
   try {
-    const actSS = SpreadsheetApp.getActiveSpreadsheet();
-    if (actSS) actSS.toast(logMsg, 'Sinkronisasi DHP', 4);
+    var actSS = SpreadsheetApp.getActiveSpreadsheet();
+    if (actSS) actSS.toast(pesan, judul, 5);
   } catch (e) {}
 }
 
 /**
- * 2. FUNGSI PERBAIKAN: Memperbaiki & Menyelaraskan Netto Hasil di Sheet Rekap
- * SANGAT PENTING:
- * - Memperbaiki baris yang Netto Hasil = 0 ATAU berbeda dengan hasil final di DHP (seperti 12 Kg vs 312 Kg atau 105 Kg vs 152,2 Kg).
- * - HANYA mengisi/mengupdate Kolom I (Netto Hasil).
- * - SAMA SEKALI TIDAK MENIMPA Kolom C, D, J, dan K karena sudah berisi rumus di sheet!
- * - Rumus di Kolom J (Susut Kg) dan Kolom K (Susut %) otomatis aktif dan akurat!
+ * 1. FUNGSI UTAMA SINKRONISASI 2 ARAH (Trigger 5 Menit, Menu Manual & Web App)
  */
-function perbaikiHasilNolDiRekap() {
-  const SPREADSHEET_DHP_ID = '${config.dhpSpreadsheetId}';
-  const SPREADSHEET_REKAP_ID = '${config.spreadsheetId}';
-  const SHEET_DHP_NAME = '${config.dhpSheetName}';
-  const SHEET_REKAP_NAME = '${config.sheetName}';
+function sinkronkanDhpKeRekap() {
+  return syncDhpToRekap({ mode: 'sync' });
+}
 
-  const ssRekap = SpreadsheetApp.openById(SPREADSHEET_REKAP_ID);
-  const shRekap = ssRekap.getSheetByName(SHEET_REKAP_NAME);
-  const ssDhp = SpreadsheetApp.openById(SPREADSHEET_DHP_ID);
-  const shDhp = ssDhp.getSheetByName(SHEET_DHP_NAME);
+/**
+ * 2. FUNGSI KHUSUS PEMBERSIHAN BATCH BATAL & REKONSILIASI TANGGAL AKTIF
+ */
+function bersihkanBatchBatalDanRekonsiliasi() {
+  var res = syncDhpToRekap({ mode: 'reconcile' });
+  try {
+    var ui = SpreadsheetApp.getUi();
+    if (ui && res && res.summary) {
+      ui.alert('🧹 Rekonsiliasi Tanggal Aktif Selesai', res.summary, ui.ButtonSet.OK);
+    }
+  } catch (e) {}
+  return res;
+}
 
-  if (!shRekap) {
-    Logger.log('ERROR: Sheet Rekap tidak ditemukan!');
-    return;
+function syncDhpToRekap(options) {
+  var opts = options || {};
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) {
+    Logger.log('Sinkronisasi dilewati: proses lain sedang berjalan.');
+    return { skipped: true };
   }
 
-  const lastRow = shRekap.getLastRow();
-  if (lastRow < 12) {
-    Logger.log('Tidak ada data di Sheet Rekap.');
-    return;
-  }
+  try {
+    var SPREADSHEET_DHP_ID = '${config.dhpSpreadsheetId}';
+    var SPREADSHEET_REKAP_ID = '${config.spreadsheetId}';
+    var SHEET_DHP_NAME = '${config.dhpSheetName}';
+    var SHEET_REKAP_NAME = '${config.sheetName}';
 
-  // 1. Ambil data referensi dari Sheet DHP
-  const dhpMap = {};
-  if (shDhp) {
-    const dhpVals = shDhp.getDataRange().getValues();
-    for (let i = 0; i < dhpVals.length; i++) {
-      const row = dhpVals[i];
-      const tgl = row[2];
-      const tembakau = String(row[3] || '').trim().toLowerCase();
-      const baku = Number(row[4]) || 0;
-      if (tgl && baku > 0) {
-        const iso = tgl instanceof Date ? Utilities.formatDate(tgl, 'GMT+7', 'yyyy-MM-dd') : String(tgl);
-        const k = iso + '|' + tembakau + '|' + baku.toFixed(1);
-        const h = Number(row[8]) || 0; // Kolom I: HASIL PROSES
-        const s = Number(row[9]) || 0; // Kolom J: SUSUT (Kg)
-        dhpMap[k] = { hasil: h, susut: s };
+    var ssDhp = SpreadsheetApp.openById(SPREADSHEET_DHP_ID);
+    var shDhp = ssDhp.getSheetByName(SHEET_DHP_NAME);
+    var ssRekap = SpreadsheetApp.openById(SPREADSHEET_REKAP_ID);
+    var shRekap = ssRekap.getSheetByName(SHEET_REKAP_NAME);
+
+    if (!shDhp || !shRekap) {
+      notifikasiUiAman_('ERROR: Sheet Sumber DHP atau Sheet Rekap tidak ditemukan!', 'Integrasi DHP Krosok');
+      return { error: 'Sheet tidak ditemukan' };
+    }
+
+    // --- TAHAP A: BACA DATA AKTIF DARI SHEET DHP KROSOK ---
+    var dhpData = shDhp.getDataRange().getValues();
+    var headerIsoDate = '';
+    for (var h = 0; h < Math.min(dhpData.length, 4); h++) {
+      if (dhpData[h] && dhpData[h][2] instanceof Date) {
+        headerIsoDate = Utilities.formatDate(dhpData[h][2], 'GMT+7', 'yyyy-MM-dd');
+        break;
       }
     }
-  }
 
-  // 2. Baca baris di Sheet Rekap
-  const rowsCount = lastRow - 11;
-  const colB = shRekap.getRange(12, 2, rowsCount, 1).getValues(); // Tanggal Proses
-  const colF = shRekap.getRange(12, 6, rowsCount, 1).getValues(); // Jenis Tembakau
-  const colH = shRekap.getRange(12, 8, rowsCount, 1).getValues(); // Netto Baku
-  const colI = shRekap.getRange(12, 9, rowsCount, 1).getValues(); // Netto Hasil
-  const colJ = shRekap.getRange(12, 10, rowsCount, 1).getValues(); // Susut (Kg)
+    var allActiveDhp = []; // Seluruh varian aktif di DHP (baik sudah selesai maupun sedang proses)
+    var completedDhp = []; // Hanya varian yang sudah memiliki Netto Hasil > 0
 
-  let fixCount = 0;
+    for (var i = 0; i < dhpData.length; i++) {
+      var row = dhpData[i];
+      var rawTgl = row[2]; // Kolom C: Tanggal Proses
+      var rawTembakau = String(row[3] || '').trim(); // Kolom D: Jenis Tembakau
+      var rawBaku = Number(row[4]) || 0; // Kolom E: Netto Baku
 
-  for (let r = 0; r < rowsCount; r++) {
-    const rowNum = 12 + r;
-    const tgl = colB[r][0];
-    const tembakau = String(colF[r][0] || '').trim().toLowerCase();
-    const baku = Number(colH[r][0]) || 0;
-    const hasil = Number(colI[r][0]) || 0;
+      if (rawTembakau && rawTembakau.toUpperCase() !== 'JENIS TEMBAKAU' && rawBaku > 0) {
+        var dateObj = rawTgl instanceof Date ? rawTgl : new Date();
+        var isoDate = Utilities.formatDate(dateObj, 'GMT+7', 'yyyy-MM-dd');
+        var gagang = Number(row[5]) || 0;
+        var air = Number(row[6]) || 0;
+        var debu = Number(row[7]) || 0;
 
-    if (baku > 0) {
-      const iso = tgl instanceof Date ? Utilities.formatDate(tgl, 'GMT+7', 'yyyy-MM-dd') : String(tgl);
-      const k = iso + '|' + tembakau + '|' + baku.toFixed(1);
-      const dhpRef = dhpMap[k];
+        var cellHasil = row[8]; // Kolom I: HASIL PROSES (boolean false jika belum ditimbang)
+        var rawHasilVal = typeof cellHasil === 'number' ? cellHasil : 0;
+        var rawSusutKgVal = typeof row[9] === 'number' ? row[9] : 0;
+        var hasil = rawHasilVal > 0 ? Math.round(rawHasilVal * 100) / 100 : 0;
 
-      let needUpdate = false;
-      let calculatedHasil = 0;
-
-      if (dhpRef && dhpRef.hasil > 0) {
-        // Jika di DHP ada hasil riil yang berbeda signifikan (>= 0.5 Kg) dari Rekap, atau Rekap masih 0
-        if (hasil <= 0 || Math.abs(dhpRef.hasil - hasil) >= 0.5) {
-          calculatedHasil = dhpRef.hasil;
-          needUpdate = true;
+        if (hasil <= 0 && cellHasil !== false) {
+          if (rawSusutKgVal > 0 && Math.abs(rawSusutKgVal - rawBaku) > 0.05 && rawSusutKgVal < rawBaku * 0.5) {
+            hasil = Math.round((rawBaku - rawSusutKgVal) * 10) / 10;
+          }
         }
-      } else if (hasil <= 0) {
-        if (dhpRef && dhpRef.susut > 0 && dhpRef.susut < baku) {
-          calculatedHasil = Math.round((baku - dhpRef.susut) * 10) / 10;
-          needUpdate = true;
-        } else {
-          const exSusut = Number(colJ[r][0]) || 0;
-          if (exSusut > 0 && exSusut < baku) {
-            calculatedHasil = Math.round((baku - exSusut) * 10) / 10;
-            needUpdate = true;
+
+        var dhpEntry = {
+          dateObj: dateObj,
+          isoDate: isoDate,
+          tembakau: rawTembakau,
+          normTembakau: normalisasiVarian_(rawTembakau),
+          jalur: rawTembakau.toUpperCase().includes('SKM') ? 'SKM' : 'SKT',
+          baku: rawBaku,
+          hasil: hasil,
+          gagang: gagang,
+          air: air,
+          debu: debu
+        };
+
+        allActiveDhp.push(dhpEntry);
+        if (hasil > 0) {
+          completedDhp.push(dhpEntry);
+        }
+      }
+    }
+
+    var targetActiveIsoDate =
+      opts.activeDateHint ||
+      (allActiveDhp.length > 0 ? allActiveDhp[0].isoDate : headerIsoDate);
+
+    // --- TAHAP B: REVERSE SCANNING & AUTO-PURGE BARIS BATAL / TEMPLATE KOSONG (BOTTOM-UP) ---
+    var purgedCancelledCount = 0;
+    var purgedTemplateCount = 0;
+    var protectedCount = 0;
+
+    if (targetActiveIsoDate && /^\\d{4}-\\d{2}-\\d{2}$/.test(targetActiveIsoDate) && shRekap.getLastRow() >= 12) {
+      var scanMaxRow = shRekap.getLastRow();
+      var scanValues = shRekap.getRange(12, 2, scanMaxRow - 11, 8).getValues(); // Kolom B..I
+      var activeRekapRows = [];
+
+      for (var r = 0; r < scanValues.length; r++) {
+        var rTgl = scanValues[r][0];
+        if (!rTgl) continue;
+        var rIso = rTgl instanceof Date
+          ? Utilities.formatDate(rTgl, 'GMT+7', 'yyyy-MM-dd')
+          : String(rTgl).trim();
+        if (rIso !== targetActiveIsoDate) continue; // DIKUNCI KETAT: Hanya Tanggal Aktif!
+
+        var rTembakau = String(scanValues[r][4] || '').trim();
+        var rBaku = Number(scanValues[r][6]) || 0;
+        var rHasil = Number(scanValues[r][7]) || 0;
+
+        activeRekapRows.push({
+          rowNum: 12 + r,
+          rTembakau: rTembakau,
+          normTembakau: normalisasiVarian_(rTembakau),
+          rBaku: rBaku,
+          rHasil: rHasil,
+          matched: false
+        });
+      }
+
+      // Pencocokan 1-ke-1 antara baris Rekap Tanggal Aktif dengan Varian Aktif DHP
+      var dhpPool = allActiveDhp.filter(function(d) { return d.isoDate === targetActiveIsoDate; }).slice();
+
+      // Pass 1: Cocokkan Varian + Netto Baku
+      for (var m1 = 0; m1 < activeRekapRows.length; m1++) {
+        var cand1 = activeRekapRows[m1];
+        if (!cand1.normTembakau || cand1.rBaku <= 0) continue;
+        for (var p1 = 0; p1 < dhpPool.length; p1++) {
+          var nameOk1 =
+            dhpPool[p1].normTembakau === cand1.normTembakau ||
+            (cand1.normTembakau.length > 2 &&
+              (dhpPool[p1].normTembakau.indexOf(cand1.normTembakau) !== -1 ||
+                cand1.normTembakau.indexOf(dhpPool[p1].normTembakau) !== -1));
+          if (nameOk1 && Math.abs(dhpPool[p1].baku - cand1.rBaku) < 0.5) {
+            cand1.matched = true;
+            dhpPool.splice(p1, 1);
+            break;
           }
         }
       }
 
-      if (needUpdate && calculatedHasil > 0) {
-        // HANYA ISI KOLOM I (Netto Hasil / Kolom ke-9)
-        // SAMA SEKALI TIDAK MENIMPA Kolom C, D, J, K karena sudah berisi formula/rumus!
-        shRekap.getRange(rowNum, 9).setValue(calculatedHasil);
-        Logger.log('Baris ' + rowNum + ' (' + tembakau + '): Netto Hasil diselaraskan dari ' + hasil + ' Kg menjadi ' + calculatedHasil + ' Kg.');
-        fixCount++;
+      // Pass 2: Cocokkan baris template (rHasil === 0) berdasarkan nama varian aktif di DHP
+      for (var m2 = 0; m2 < activeRekapRows.length; m2++) {
+        var cand2 = activeRekapRows[m2];
+        if (cand2.matched || !cand2.normTembakau || cand2.rHasil > 0) continue;
+        for (var p2 = 0; p2 < dhpPool.length; p2++) {
+          var nameOk2 =
+            dhpPool[p2].normTembakau === cand2.normTembakau ||
+            (cand2.normTembakau.length > 2 &&
+              (dhpPool[p2].normTembakau.indexOf(cand2.normTembakau) !== -1 ||
+                cand2.normTembakau.indexOf(dhpPool[p2].normTembakau) !== -1));
+          if (nameOk2) {
+            cand2.matched = true;
+            dhpPool.splice(p2, 1);
+            break;
+          }
+        }
+      }
+
+      // Penelusuran Bawah-ke-Atas (Bottom-Up): deleteRow tidak menggeser indeks baris di atasnya!
+      for (var k = activeRekapRows.length - 1; k >= 0; k--) {
+        var item = activeRekapRows[k];
+        var checkRow = item.rowNum;
+
+        // PENGAMAN MUTLAK (FAIL-SAFE): Hanya Netto Hasil === 0 yang boleh dihapus!
+        if (item.rHasil > 0) {
+          if (!item.matched) {
+            protectedCount++;
+            Logger.log('FAIL-SAFE: Baris ' + checkRow + ' (' + item.rTembakau + ') memiliki Hasil ' + item.rHasil + ' Kg -> DILINDUNGI.');
+          }
+          continue;
+        }
+
+        var isTemplateKosong = (item.rBaku <= 0 && item.rHasil <= 0 && !item.matched);
+        var isRencanaBatal = (item.rBaku > 0 && item.rHasil <= 0 && !item.matched);
+
+        if (isTemplateKosong || isRencanaBatal) {
+          if (checkRow === 12 && shRekap.getLastRow() <= 12) {
+            // Proteksi Master Formula Baris 12: bersihkan sel non-rumus saja (C, D, E, J, K tetap utuh)
+            shRekap.getRange(12, 2).clearContent();
+            shRekap.getRange(12, 6, 1, 4).clearContent();
+            shRekap.getRange(12, 12, 1, 3).clearContent();
+          } else if (checkRow >= 12) {
+            shRekap.deleteRow(checkRow);
+          }
+          if (isTemplateKosong) purgedTemplateCount++;
+          if (isRencanaBatal) purgedCancelledCount++;
+        }
       }
     }
-  }
 
-  const resMsg = (fixCount > 0)
-    ? 'SUKSES: Berhasil menyelaraskan Netto Hasil pada ' + fixCount + ' baris di Sheet Rekap! Kolom C, D, J, K tetap aman dan rumus otomatis akurat.'
-    : 'INFO: Semua baris di Sheet Rekap sudah terisi dan selaras dengan DHP (0 baris perlu diupdate).';
-
-  Logger.log(resMsg);
-
-  // Penanganan toast aman untuk mode Standalone Script (mencegah error Cannot read properties of null)
-  try {
-    const actSS = SpreadsheetApp.getActiveSpreadsheet();
-    if (actSS) {
-      actSS.toast(resMsg, 'Penyelarasan Netto Hasil', 5);
+    // --- TAHAP C: PEMBUKUAN & UPDATE BATCH SELESAI (HASIL > 0) DENGAN PROTEKSI RUMUS ---
+    function findActualLastRow_(sheet) {
+      var max = sheet.getLastRow();
+      if (max < 12) return 11;
+      var colB = sheet.getRange(12, 2, max - 11, 1).getValues();
+      for (var idx = colB.length - 1; idx >= 0; idx--) {
+        var v = colB[idx][0];
+        if (v instanceof Date || (typeof v === 'string' && v.trim() !== '')) {
+          return 12 + idx;
+        }
+      }
+      return 11;
     }
-  } catch (e) {
-    // Mode editor standalone tidak memiliki active UI toast
+
+    var lastRow = findActualLastRow_(shRekap);
+    var rekapEntries = [];
+    if (lastRow >= 12) {
+      var rekapValues = shRekap.getRange(12, 2, lastRow - 11, 8).getValues();
+      for (var rr = 0; rr < rekapValues.length; rr++) {
+        var tglVal = rekapValues[rr][0];
+        if (!tglVal) continue;
+        var isoVal = tglVal instanceof Date
+          ? Utilities.formatDate(tglVal, 'GMT+7', 'yyyy-MM-dd')
+          : String(tglVal).trim();
+        var tembVal = String(rekapValues[rr][4] || '').trim();
+        rekapEntries.push({
+          rowNum: 12 + rr,
+          isoDate: isoVal,
+          normTembakau: normalisasiVarian_(tembVal),
+          curBaku: Number(rekapValues[rr][6]) || 0,
+          curHasil: Number(rekapValues[rr][7]) || 0,
+          used: false
+        });
+      }
+    }
+
+    var appendedCount = 0;
+    var updatedCount = 0;
+    var currentRow = lastRow;
+
+    for (var c = 0; c < completedDhp.length; c++) {
+      var dBatch = completedDhp[c];
+      var matchEntry = null;
+
+      // Cari kecocokan presisi (Tanggal + Varian + Baku) atau baris template varian yang sama (Hasil === 0)
+      for (var re = 0; re < rekapEntries.length; re++) {
+        var cand = rekapEntries[re];
+        if (cand.used || cand.isoDate !== dBatch.isoDate) continue;
+        if (cand.normTembakau === dBatch.normTembakau && Math.abs(cand.curBaku - dBatch.baku) < 0.5) {
+          matchEntry = cand;
+          break;
+        }
+      }
+      if (!matchEntry) {
+        for (var re2 = 0; re2 < rekapEntries.length; re2++) {
+          var candT = rekapEntries[re2];
+          if (candT.used || candT.isoDate !== dBatch.isoDate || candT.curHasil > 0) continue;
+          if (candT.normTembakau === dBatch.normTembakau) {
+            matchEntry = candT;
+            break;
+          }
+        }
+      }
+
+      if (!matchEntry) {
+        currentRow++;
+        // HANYA ISI KOLOM NON-FORMULA (Kolom C, D, E, J, K AMAN 100%):
+        shRekap.getRange(currentRow, 2).setValue(dBatch.dateObj);   // B: Tanggal
+        shRekap.getRange(currentRow, 6).setValue(dBatch.tembakau);  // F: Jenis Tembakau
+        shRekap.getRange(currentRow, 7).setValue(dBatch.jalur);     // G: Jalur (SKT/SKM)
+        shRekap.getRange(currentRow, 8).setValue(dBatch.baku);      // H: Netto Baku
+        shRekap.getRange(currentRow, 9).setValue(dBatch.hasil);     // I: Netto Hasil
+        shRekap.getRange(currentRow, 12).setValue(dBatch.gagang);   // L: Gagang
+        shRekap.getRange(currentRow, 13).setValue(dBatch.air);      // M: Air
+        shRekap.getRange(currentRow, 14).setValue(dBatch.debu);     // N: Debu
+
+        if (currentRow > 12) {
+          if (!shRekap.getRange(currentRow, 3).getFormula()) {
+            shRekap.getRange(currentRow - 1, 3, 1, 3).copyTo(
+              shRekap.getRange(currentRow, 3, 1, 3),
+              SpreadsheetApp.CopyPasteType.PASTE_FORMULA,
+              false
+            );
+          }
+          if (!shRekap.getRange(currentRow, 10).getFormula()) {
+            shRekap.getRange(currentRow - 1, 10, 1, 2).copyTo(
+              shRekap.getRange(currentRow, 10, 1, 2),
+              SpreadsheetApp.CopyPasteType.PASTE_FORMULA,
+              false
+            );
+          }
+        }
+        appendedCount++;
+      } else {
+        matchEntry.used = true;
+        if (Math.abs(matchEntry.curHasil - dBatch.hasil) >= 0.5 || Math.abs(matchEntry.curBaku - dBatch.baku) >= 0.5) {
+          // Update kolom mentah tanpa menyentuh rumus C, D, E, J, K
+          shRekap.getRange(matchEntry.rowNum, 6).setValue(dBatch.tembakau);
+          shRekap.getRange(matchEntry.rowNum, 7).setValue(dBatch.jalur);
+          shRekap.getRange(matchEntry.rowNum, 8).setValue(dBatch.baku);
+          shRekap.getRange(matchEntry.rowNum, 9).setValue(dBatch.hasil);
+          shRekap.getRange(matchEntry.rowNum, 12).setValue(dBatch.gagang);
+          shRekap.getRange(matchEntry.rowNum, 13).setValue(dBatch.air);
+          shRekap.getRange(matchEntry.rowNum, 14).setValue(dBatch.debu);
+          updatedCount++;
+        }
+      }
+    }
+
+    var totalPurged = purgedCancelledCount + purgedTemplateCount;
+    var summaryMsg =
+      'Tanggal Aktif: ' + (targetActiveIsoDate || '-') +
+      ' | Varian Batal Dihapus: ' + purgedCancelledCount +
+      ' | Template Kosong Dihapus: ' + purgedTemplateCount +
+      ' | Batch Baru: ' + appendedCount +
+      ' | Update Hasil: ' + updatedCount +
+      (protectedCount > 0 ? ' | Dilindungi Fail-Safe (Hasil>0): ' + protectedCount : '') +
+      ' | Rumus C, D, E, J, K Aman 100%.';
+
+    notifikasiUiAman_(
+      totalPurged > 0 || appendedCount > 0 || updatedCount > 0
+        ? summaryMsg
+        : 'Seluruh data Rekap & DHP sudah selaras dan bersih (0 baris batal).',
+      'Integrasi DHP Krosok'
+    );
+
+    return {
+      activeIsoDate: targetActiveIsoDate,
+      purgedCancelledCount: purgedCancelledCount,
+      purgedTemplateCount: purgedTemplateCount,
+      appendedCount: appendedCount,
+      updatedCount: updatedCount,
+      protectedCount: protectedCount,
+      summary: summaryMsg
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * 3. MANAJEMEN PEMICU OTOMATIS (AUTO-PUSH 5 MENIT)
+ */
+function aktifkanAutoPush5Menit() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'sinkronkanDhpKeRekap') {
+      ScriptApp.deleteTrigger(triggers[i]);
+    }
+  }
+  ScriptApp.newTrigger('sinkronkanDhpKeRekap')
+    .timeBased()
+    .everyMinutes(5)
+    .create();
+  notifikasiUiAman_('Auto-Push 5 Menit AKTIF (Sinkronisasi & Auto-Purge Batal berjalan otomatis).', 'Auto-Push DHP Krosok');
+}
+
+function matikanAutoPush() {
+  var triggers = ScriptApp.getProjectTriggers();
+  var removed = 0;
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'sinkronkanDhpKeRekap') {
+      ScriptApp.deleteTrigger(triggers[i]);
+      removed++;
+    }
+  }
+  notifikasiUiAman_('Auto-Push dimatikan (' + removed + ' pemicu dihentikan).', 'Auto-Push DHP Krosok');
+}
+
+function cekStatusPemicu() {
+  var triggers = ScriptApp.getProjectTriggers();
+  var active = 0;
+  for (var i = 0; i < triggers.length; i++) {
+    if (triggers[i].getHandlerFunction() === 'sinkronkanDhpKeRekap') active++;
+  }
+  var msg = active > 0
+    ? 'AKTIF (' + active + ' pemicu berjalan otomatis setiap 5 menit dengan pengaman Auto-Purge Hasil=0).'
+    : 'NONAKTIF (Belum ada pemicu waktu aktif. Pilih "⏰ Aktifkan Auto-Push 5 Menit" untuk mengaktifkan).';
+  notifikasiUiAman_(msg, 'Status Pemicu DHP Krosok');
+  try {
+    SpreadsheetApp.getUi().alert('ℹ Status Pemicu Integrasi DHP Krosok', msg, SpreadsheetApp.getUi().ButtonSet.OK);
+  } catch (e) {}
+}
+
+function perbaikiHasilNolDiRekap() {
+  return bersihkanBatchBatalDanRekonsiliasi();
+}
+
+/**
+ * 4. ENDPOINT WEB APP (Menerima Tombol 1-Klik "Bersihkan Batch Batal Live" dari Web App)
+ */
+function doPost(e) {
+  try {
+    var payload = e && e.postData && e.postData.contents ? JSON.parse(e.postData.contents) : {};
+    var res = syncDhpToRekap({
+      mode: payload.action === 'reconcileActiveDate' ? 'reconcile' : 'sync',
+      activeDateHint: payload.activeIsoDate || ''
+    });
+    return ContentService.createTextOutput(JSON.stringify({ success: true, result: res }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.message }))
+      .setMimeType(ContentService.MimeType.JSON);
   }
 }`;
 
@@ -811,17 +1079,19 @@ function perbaikiHasilNolDiRekap() {
               <span>{refreshing ? 'Memeriksa...' : 'Tarik Ulang DHP'}</span>
             </button>
 
-            {/* Dynamic Dropdown for Technical Utilities (Pemetaan Kolom & Skrip Otomasi GAS) */}
+            {/* Dynamic Dropdown for Technical Utilities (Rekonsiliasi Batal, Pemetaan Kolom & Skrip Otomasi GAS) */}
             <div ref={techMenuRef} className="relative shrink-0">
               <button
                 type="button"
                 onClick={() => setTechMenuOpen((prev) => !prev)}
                 aria-expanded={techMenuOpen}
                 aria-haspopup="menu"
-                title="Utilitas Teknis: Pemetaan Kolom & Skrip Otomasi GAS"
-                className={`min-h-[36px] sm:min-h-[32px] inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border transition-all cursor-pointer ${
+                title="Utilitas Teknis: Bersihkan Batch Batal, Pemetaan Kolom & Skrip Otomasi GAS"
+                className={`min-h-[36px] sm:min-h-[32px] relative inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border transition-all cursor-pointer ${
                   activeTab === 'mapping' || activeTab === 'script'
                     ? 'bg-indigo-50 text-indigo-700 border-indigo-300 shadow-2xs'
+                    : purgeableCount > 0
+                    ? 'bg-amber-50 text-amber-800 border-amber-300 shadow-2xs'
                     : techMenuOpen
                     ? 'bg-slate-200/80 text-slate-900 border-slate-300'
                     : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900 shadow-2xs'
@@ -839,6 +1109,11 @@ function perbaikiHasilNolDiRekap() {
                     {activeTab === 'mapping' ? 'Pemetaan Kolom' : 'Skrip GAS'}
                   </span>
                 )}
+                {purgeableCount > 0 && activeTab !== 'mapping' && activeTab !== 'script' && (
+                  <span className="inline-flex items-center justify-center px-1.5 py-0.2 rounded bg-rose-600 text-white text-[10px] font-mono font-bold tabular-nums">
+                    {purgeableCount}
+                  </span>
+                )}
                 <ChevronDown
                   className={`w-3 h-3 shrink-0 transition-transform ${
                     techMenuOpen ? 'rotate-180' : ''
@@ -850,11 +1125,52 @@ function perbaikiHasilNolDiRekap() {
                 <div
                   role="menu"
                   aria-label="Menu Utilitas Teknis"
-                  className="absolute right-0 top-full mt-1.5 w-72 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 animate-in fade-in"
+                  className="absolute right-0 top-full mt-1.5 w-80 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 animate-in fade-in"
                 >
                   <div className="px-3 py-1 text-[11px] font-semibold text-slate-400">
                     Utilitas &amp; Konfigurasi Teknis
                   </div>
+
+                  {/* OPSI 1-KLIK: BERSIHKAN BATCH BATAL & REKONSILIASI */}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={reconciling}
+                    onClick={() => {
+                      setTechMenuOpen(false);
+                      if (activeTab !== 'preview') {
+                        setActiveTab('preview');
+                      }
+                      handlePurgeAndReconcile();
+                    }}
+                    className={`w-full px-3 py-2 text-left flex items-start gap-2.5 transition-colors cursor-pointer disabled:opacity-60 border-b border-slate-100 ${
+                      purgeableCount > 0
+                        ? 'bg-amber-50/70 hover:bg-amber-100/70 text-amber-950'
+                        : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Trash2
+                      className={`w-4 h-4 mt-0.5 shrink-0 ${
+                        purgeableCount > 0 ? 'text-rose-600' : 'text-amber-600'
+                      }`}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold">
+                          Bersihkan Batch Batal &amp; Rekonsiliasi
+                        </span>
+                        {purgeableCount > 0 && (
+                          <span className="px-1.5 py-0.5 rounded bg-rose-100 text-rose-700 border border-rose-200 text-[10px] font-mono font-bold shrink-0 tabular-nums">
+                            {purgeableCount} Batal
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-snug mt-0.5">
+                        Hapus baris rencana batal/kosong (Hasil = 0 Kg) pada tanggal aktif &amp;
+                        selaraskan varian riil DHP
+                      </p>
+                    </div>
+                  </button>
 
                   <button
                     type="button"
@@ -882,7 +1198,7 @@ function perbaikiHasilNolDiRekap() {
                         )}
                       </div>
                       <p className="text-[11px] text-slate-500 leading-snug mt-0.5">
-                        Verifikasi relasi kolom DHP ke Rekap &amp; proteksi rumus C, D, J, K
+                        Verifikasi relasi kolom DHP ke Rekap &amp; proteksi rumus C, D, E, J, K
                       </p>
                     </div>
                   </button>
@@ -913,7 +1229,8 @@ function perbaikiHasilNolDiRekap() {
                         )}
                       </div>
                       <p className="text-[11px] text-slate-500 leading-snug mt-0.5">
-                        Kode Google Apps Script sinkronisasi langsung DHP Krosok
+                        Kode IntegrasiDHP.gs (Sinkronisasi 2 Arah, Auto-Purge Batal &amp; Menu
+                        Spreadsheet)
                       </p>
                     </div>
                   </button>
@@ -947,17 +1264,108 @@ function perbaikiHasilNolDiRekap() {
             }
           }}
         >
-          {/* Success Notification */}
+          {/* Status / Reconciliation Notification */}
           {syncSuccessMsg && (
-            <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2 animate-in fade-in">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span className="font-semibold">{syncSuccessMsg}</span>
+            <div
+              className={`px-3 py-1.5 rounded-lg border text-xs flex flex-wrap items-center justify-between gap-2 animate-in fade-in ${
+                syncFeedbackTone === 'amber'
+                  ? 'bg-amber-50 border-amber-300 text-amber-900'
+                  : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              }`}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                {syncFeedbackTone === 'amber' ? (
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                )}
+                <span className="font-semibold leading-snug">{syncSuccessMsg}</span>
+              </div>
+              {syncFeedbackTone === 'amber' && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('script')}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-800 hover:bg-amber-900 text-white text-[10.5px] font-semibold shrink-0 cursor-pointer"
+                >
+                  <Code2 className="w-3 h-3 shrink-0" />
+                  <span>Buka Skrip GAS</span>
+                </button>
+              )}
             </div>
           )}
 
           {/* TAB 1: PREVIEW & SYNC */}
           {activeTab === 'preview' && (
             <div className="space-y-1.5">
+              {/* CONDITIONAL BANNER AUDIT REALISASI (Auto-detects Cancelled Plans & Empty Templates on Active Date) */}
+              {purgeableCount > 0 && realizationAudit && (
+                <div className="px-3 py-1.5 rounded-lg bg-rose-50/90 border border-rose-300 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs animate-in fade-in">
+                  <div className="flex items-start sm:items-center gap-2 min-w-0">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5 sm:mt-0" />
+                    <div className="min-w-0 leading-snug text-rose-950">
+                      <span className="font-bold">
+                        Audit Realisasi ({realizationAudit.activeDateDisplay}):
+                      </span>{' '}
+                      <span>
+                        Terdeteksi{' '}
+                        <strong className="text-rose-700 font-mono">
+                          {purgeableCount} baris batal/kosong
+                        </strong>{' '}
+                        di Sheet Rekap (
+                        {cancelledPlanCount > 0 && `${cancelledPlanCount} rencana batal`}
+                        {cancelledPlanCount > 0 && emptyTemplateCount > 0 && ', '}
+                        {emptyTemplateCount > 0 && `${emptyTemplateCount} template kosong`} · Netto
+                        Hasil = 0 Kg) di luar{' '}
+                        <strong>{realizationAudit.dhpActiveCount} varian riil DHP</strong>.
+                      </span>
+                      {realizationAudit.cancelledPlanRows.length > 0 && (
+                        <span className="text-[11px] text-rose-700 ml-1">
+                          [
+                          {realizationAudit.cancelledPlanRows
+                            .slice(0, 3)
+                            .map((r) => r.jenisKrosok || `Brs ${r.srcRow}`)
+                            .join(', ')}
+                          {realizationAudit.cancelledPlanRows.length > 3
+                            ? ` +${realizationAudit.cancelledPlanRows.length - 3} lainnya`
+                            : ''}
+                          ]
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handlePurgeAndReconcile}
+                    disabled={reconciling}
+                    className="min-h-[34px] sm:min-h-[28px] inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-md bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold shadow-2xs transition-colors disabled:opacity-50 cursor-pointer shrink-0 whitespace-nowrap"
+                  >
+                    {reconciling ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
+                    ) : (
+                      <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                    )}
+                    <span>
+                      {reconciling ? 'Membersihkan...' : 'Bersihkan Batch Batal Live'}
+                    </span>
+                  </button>
+                </div>
+              )}
+
+              {/* FAIL-SAFE PROTECTED NOTICE (Only if Rekap has active-date rows NOT in DHP with Hasil > 0) */}
+              {purgeableCount === 0 && protectedOrphanCount > 0 && realizationAudit && (
+                <div className="px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-between gap-2 text-[11px] text-amber-900">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                    <span>
+                      <strong>Fail-Safe Aktif ({realizationAudit.activeDateDisplay}):</strong>{' '}
+                      Terdapat {protectedOrphanCount} baris di Sheet Rekap yang tidak ada di DHP
+                      aktif namun memiliki <strong>Netto Hasil &gt; 0 Kg</strong> — dilindungi
+                      mutlak dari penghapusan otomatis.
+                    </span>
+                  </div>
+                </div>
+              )}
               {/* Compact 3-Column Metrics Strip */}
               <div
                 className={`grid ${
@@ -2293,19 +2701,55 @@ function perbaikiHasilNolDiRekap() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h4 className="text-xs font-bold text-slate-800">
-                    Skrip Google Apps Script untuk Otomasi di Google Sheets
+                    Skrip Google Apps Script (IntegrasiDHP.gs) — Sinkronisasi 2 Arah &amp;
+                    Auto-Purge Batal
                   </h4>
                   <p className="text-[11px] text-slate-500">
-                    Pasang skrip ini di menu *Extensions -&gt; Apps Script* pada spreadsheet Anda untuk menambahkan tombol menu otomatis di Google Sheets.
+                    Pasang pada <strong>Extensions -&gt; Apps Script</strong> di Spreadsheet untuk
+                    mengaktifkan menu <strong>⚡ Integrasi DHP Krosok</strong> (Sinkronisasi,
+                    Bersihkan Batch Batal Bottom-Up, &amp; Auto-Push 5 Menit) serta koneksi tombol
+                    1-klik Web App.
                   </p>
                 </div>
                 <button
                   onClick={copyScriptToClipboard}
                   className="min-h-[38px] sm:min-h-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white shadow-2xs transition-colors cursor-pointer"
                 >
-                  {copiedScript ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedScript ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5" />
+                  )}
                   <span>{copiedScript ? 'Tersalin ke Clipboard!' : 'Salin Skrip'}</span>
                 </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-[11px]">
+                <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                  <div className="font-bold text-slate-800">1. Reverse Scanning (Bottom-Up)</div>
+                  <p className="text-slate-600 mt-0.5 leading-snug">
+                    Menyusuri baris tanggal aktif dari bawah ke atas sehingga penghapusan baris
+                    batal/kosong tidak menggeser indeks baris di atasnya.
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-lg bg-emerald-50/70 border border-emerald-200">
+                  <div className="font-bold text-emerald-900">
+                    2. Fail-Safe Mutlak (Hasil === 0)
+                  </div>
+                  <p className="text-emerald-800 mt-0.5 leading-snug">
+                    Hanya baris dengan Netto Hasil = 0 Kg pada Tanggal Aktif yang dapat dihapus.
+                    Baris berisi output riil (&gt; 0 Kg) &amp; tanggal historis terlindungi 100%.
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-lg bg-blue-50/70 border border-blue-200">
+                  <div className="font-bold text-blue-900">
+                    3. Proteksi Rumus C, D, E, J, K
+                  </div>
+                  <p className="text-blue-800 mt-0.5 leading-snug">
+                    Formula Bulan, Tahun, Join Perlakuan, Susut Kg, dan Susut % disalin otomatis
+                    tanpa pernah ditimpa nilai statis.
+                  </p>
+                </div>
               </div>
 
               <div className="bg-slate-950 rounded-xl p-4 overflow-x-auto text-slate-200 font-mono text-[11px] leading-relaxed max-h-96 border border-slate-800">

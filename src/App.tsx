@@ -193,25 +193,39 @@ export default function App() {
     localStorage.setItem('krosok_sidebar_collapsed_v1', String(next));
   };
 
-  // Append new records from DHP into local Rekap data
+  // Append new records from DHP into local Rekap data (strictly hasil > 0)
   const handleAppendRecordsToRekap = (newRecords: KrosokRecord[]) => {
+    const validNew = newRecords.filter((nr) => nr.baku > 0 && nr.hasil > 0);
     setRecords((prev) => {
-      const existingKeys = new Set(
-        prev.map((r) => `${r.tanggal}_${r.jenisKrosok.toLowerCase()}_${r.baku.toFixed(1)}`)
-      );
-      const toAdd = newRecords.filter(
-        (nr) => !existingKeys.has(`${nr.tanggal}_${nr.jenisKrosok.toLowerCase()}_${nr.baku.toFixed(1)}`)
-      );
-      const updated = [...prev, ...toAdd];
-      setCachedRecords(updated);
-      return updated;
+      const updatedList = [...prev];
+      for (const nr of validNew) {
+        const matchIdx = updatedList.findIndex(
+          (r) =>
+            r.tanggal === nr.tanggal &&
+            r.jenisKrosok.toLowerCase() === nr.jenisKrosok.toLowerCase() &&
+            Math.abs(r.baku - nr.baku) < 0.5
+        );
+        if (matchIdx >= 0) {
+          updatedList[matchIdx] = { ...updatedList[matchIdx], ...nr };
+        } else {
+          updatedList.push(nr);
+        }
+      }
+      setCachedRecords(updatedList);
+      return updatedList;
     });
 
     setDhpItems((prev) =>
-      prev.map((item) => ({
-        ...item,
-        isMatchedInRekap: true
-      }))
+      prev.map((item) =>
+        item.hasil > 0
+          ? {
+              ...item,
+              isMatchedInRekap: true,
+              needsUpdateInRekap: false,
+              rekapHasil: item.hasil
+            }
+          : item
+      )
     );
   };
 
@@ -602,6 +616,7 @@ export default function App() {
         weatherLoading={weatherLoading}
         onRefreshWeather={(loc, force) => refreshFactoryWeather(loc, force ?? true)}
         onNavigateToAnalisisTab={() => setActiveTab('analisis_deviasi')}
+        onTriggerFullSync={() => performSync(true)}
       />
 
       <NewEntryModal
