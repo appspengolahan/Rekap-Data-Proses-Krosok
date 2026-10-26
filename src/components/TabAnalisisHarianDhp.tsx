@@ -583,9 +583,9 @@ export const TabAnalisisHarianDhp: React.FC<TabAnalisisHarianDhpProps> = ({
 
   // Dedicated Live Telemetry Console (Upper Viewport Priority)
   const liveTelemetriPanel = (
-    <div className="rounded-xl bg-slate-950 text-white p-3.5 sm:p-4 border border-slate-800 space-y-3 shadow-xs">
+    <div className="rounded-xl bg-slate-950 text-white p-3 sm:p-3.5 border border-slate-800 space-y-2.5 shadow-xs">
       {/* Header Row: Title + Live Telemetry Status on Left | Factory Location Selector + Refresh + Address on Right */}
-      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-2.5 border-b border-slate-800/90 pb-3">
+      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-2 border-b border-slate-800/90 pb-2.5">
         <div className="flex items-start gap-2.5 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-blue-600/20 border border-blue-500/35 flex items-center justify-center text-sky-400 shrink-0 mt-0.5">
             <Thermometer className="w-4 h-4" />
@@ -668,43 +668,43 @@ export const TabAnalisisHarianDhp: React.FC<TabAnalisisHarianDhpProps> = ({
       {weatherData ? (
         <>
           {/* 4 Live Telemetry Readout Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 tabular-nums">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 tabular-nums">
             {/* 1. Suhu Udara */}
-            <div className="rounded-lg bg-slate-900/90 border border-slate-800 px-3 py-2.5">
+            <div className="rounded-lg bg-slate-900/90 border border-slate-800 px-3 py-2">
               <div className="text-[10.5px] text-slate-400 flex items-center justify-between gap-1">
                 <span>Suhu Udara</span>
                 <Thermometer className="w-3 h-3 text-amber-400 shrink-0" />
               </div>
-              <div className="mt-1 flex items-baseline gap-1.5">
-                <span className="font-mono text-base sm:text-lg font-bold text-white">
+              <div className="mt-0.5 flex items-baseline gap-1.5">
+                <span className="font-mono text-base font-bold text-white">
                   {weatherData.temperature.toFixed(1)}°C
                 </span>
                 <span className="text-[10.5px] text-slate-400">Ambien</span>
               </div>
-              <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+              <div className="text-[10px] text-slate-500 font-mono">
                 Elevasi {weatherData.location.elevationM ?? 444}m dpl
               </div>
             </div>
 
             {/* 2. Kelembaban (RH) */}
-            <div className="rounded-lg bg-slate-900/90 border border-slate-800 px-3 py-2.5">
+            <div className="rounded-lg bg-slate-900/90 border border-slate-800 px-3 py-2">
               <div className="text-[10.5px] text-slate-400 flex items-center justify-between gap-1">
                 <span>Kelembaban (RH)</span>
                 <Droplets className="w-3 h-3 text-sky-400 shrink-0" />
               </div>
-              <div className="mt-1 flex items-baseline gap-1.5">
-                <span className="font-mono text-base sm:text-lg font-bold text-sky-400">
+              <div className="mt-0.5 flex items-baseline gap-1.5">
+                <span className="font-mono text-base font-bold text-sky-400">
                   {Math.round(weatherData.humidity)}%
                 </span>
                 <span className="text-[10.5px] text-slate-400">Relatif</span>
               </div>
-              <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+              <div className="text-[10px] text-slate-500 font-mono">
                 Presipitasi {weatherData.precipitation.toFixed(1)} mm
               </div>
             </div>
 
             {/* 3. Kondisi Cuaca */}
-            <div className="rounded-lg bg-slate-900/90 border border-slate-800 px-3 py-2.5">
+            <div className="rounded-lg bg-slate-900/90 border border-slate-800 px-3 py-2">
               <div className="text-[10.5px] text-slate-400 flex items-center justify-between gap-1">
                 <span>Kondisi Cuaca</span>
                 {weatherData.precipitation > 0 ? (
@@ -714,12 +714,12 @@ export const TabAnalisisHarianDhp: React.FC<TabAnalisisHarianDhpProps> = ({
                 )}
               </div>
               <div
-                className="text-xs sm:text-sm font-bold text-white mt-1 truncate"
+                className="text-xs sm:text-sm font-bold text-white mt-0.5 truncate"
                 title={weatherData.weatherDesc}
               >
                 {weatherData.weatherDesc}
               </div>
-              <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1.5 font-mono">
+              <div className="text-[10px] text-slate-400 flex items-center gap-1.5 font-mono">
                 <Wind className="w-3 h-3 text-slate-500 shrink-0" />
                 <span>{Math.round(weatherData.windSpeed)} km/j</span>
                 <span className="text-slate-600">·</span>
@@ -728,11 +728,11 @@ export const TabAnalisisHarianDhp: React.FC<TabAnalisisHarianDhpProps> = ({
             </div>
 
             {/* 4. Indeks Higroskopis */}
-            <div className={`rounded-lg border px-3 py-2.5 ${hygroCardTheme.box}`}>
+            <div className={`rounded-lg border px-3 py-2 ${hygroCardTheme.box}`}>
               <div className={`text-[10.5px] font-medium ${hygroCardTheme.label}`}>
                 Indeks Higroskopis
               </div>
-              <div className="mt-1 flex items-baseline gap-1.5 flex-wrap">
+              <div className="mt-0.5 flex items-baseline gap-1.5 flex-wrap">
                 <span className={`text-xs sm:text-sm font-bold ${hygroCardTheme.value}`}>
                   {weatherData.hygroIndex.status}
                 </span>
@@ -740,7 +740,7 @@ export const TabAnalisisHarianDhp: React.FC<TabAnalisisHarianDhpProps> = ({
                   {hygroCardTheme.code}
                 </span>
               </div>
-              <div className={`text-[10px] mt-0.5 font-mono ${hygroCardTheme.sub}`}>
+              <div className={`text-[10px] font-mono ${hygroCardTheme.sub}`}>
                 Uap: {weatherData.hygroIndex.potensiPenguapan} · Debu:{' '}
                 {weatherData.hygroIndex.resikoDebu}
               </div>
@@ -849,9 +849,9 @@ export const TabAnalisisHarianDhp: React.FC<TabAnalisisHarianDhpProps> = ({
   );
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       {/* Top Bar: Active Evaluation Date & Source Mode Switcher */}
-      <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+      <div className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 flex-wrap">
             <span>Alarm Dini &amp; Evaluasi Susut Harian</span>
@@ -859,8 +859,11 @@ export const TabAnalisisHarianDhp: React.FC<TabAnalisisHarianDhpProps> = ({
               ·
             </span>
             <span className="text-blue-700 font-semibold">{activeDateText}</span>
+            <span className="hidden lg:inline text-[11px] font-normal text-slate-500">
+              · Acuan Aktif: <strong className="text-slate-700">{baselineMeta.periodeLabel}</strong>
+            </span>
           </div>
-          <p className="text-[11px] text-slate-500 mt-0.5">
+          <p className="lg:hidden text-[11px] text-slate-500 mt-0.5">
             Standar Acuan Aktif:{' '}
             <strong className="text-slate-700">{baselineMeta.periodeLabel}</strong> · Sumber
             kebenaran tunggal Data Krosok
@@ -1265,24 +1268,24 @@ export const TabAnalisisHarianDhp: React.FC<TabAnalisisHarianDhpProps> = ({
               ))}
             </div>
 
-            {/* Tablet & Desktop Table (>= 768px) */}
+            {/* Tablet & Desktop Table (>= 768px) — Full-Width Zero-Slider Layout */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-xs text-left">
                 <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200 uppercase text-[10px] tracking-wider">
                   <tr>
-                    <th className="py-2 px-3 sticky left-0 z-10 bg-slate-100 shadow-[1px_0_0_0_rgba(203,213,225,0.8)]">
+                    <th className="py-1.5 px-3 sticky left-0 xl:static z-10 bg-slate-100 shadow-[1px_0_0_0_rgba(203,213,225,0.8)] xl:shadow-none">
                       Jenis Krosok
                     </th>
-                    <th className="py-2 px-2 text-center">Jalur</th>
-                    <th className="py-2 px-2.5 text-right whitespace-nowrap">Baku (Kg)</th>
-                    <th className="py-2 px-2.5 text-right whitespace-nowrap">Hasil (Kg)</th>
-                    <th className="py-2 px-2.5 text-right whitespace-nowrap">Susut Riil</th>
-                    <th className="py-2 px-2.5 text-right text-emerald-700 whitespace-nowrap">
+                    <th className="py-1.5 px-2 text-center">Jalur</th>
+                    <th className="py-1.5 px-2.5 text-right whitespace-nowrap">Baku (Kg)</th>
+                    <th className="py-1.5 px-2.5 text-right whitespace-nowrap">Hasil (Kg)</th>
+                    <th className="py-1.5 px-2.5 text-right whitespace-nowrap">Susut Riil</th>
+                    <th className="py-1.5 px-2.5 text-right text-emerald-700 whitespace-nowrap">
                       Acuan
                     </th>
-                    <th className="py-2 px-2.5 text-right whitespace-nowrap">Deviasi (Δ)</th>
-                    <th className="py-2 px-2.5 text-center">Status</th>
-                    <th className="py-2 px-3 min-w-[270px]">
+                    <th className="py-1.5 px-2.5 text-right whitespace-nowrap">Deviasi (Δ)</th>
+                    <th className="py-1.5 px-2.5 text-center">Status</th>
+                    <th className="py-1.5 px-3 min-w-[260px]">
                       Faktor Dominan &amp; Auto-Diagnosa Singkat
                     </th>
                   </tr>
@@ -1298,7 +1301,7 @@ export const TabAnalisisHarianDhp: React.FC<TabAnalisisHarianDhpProps> = ({
                         }`}
                       >
                         <td
-                          className={`py-2.5 px-3 font-semibold text-slate-900 sticky left-0 z-10 shadow-[1px_0_0_0_rgba(226,232,240,0.9)] ${
+                          className={`py-2 px-3 font-semibold text-slate-900 sticky left-0 xl:static z-10 shadow-[1px_0_0_0_rgba(226,232,240,0.9)] xl:shadow-none ${
                             isOos
                               ? 'bg-rose-50 group-hover:bg-blue-50'
                               : 'bg-white group-hover:bg-blue-50'
