@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   X,
   Database,
@@ -23,6 +23,8 @@ import {
   Thermometer,
   Droplets,
   Sliders,
+  Settings2,
+  ChevronDown,
   Info,
   TrendingUp
 } from 'lucide-react';
@@ -110,6 +112,37 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
   // Live Auto-Sync State (Aman 12 detik, zero-risk pemblokiran kuota Google)
   const [isLiveSyncActive, setIsLiveSyncActive] = useState(true);
   const [countdown, setCountdown] = useState(12);
+
+  // Dynamic Technical Utilities Dropdown State (Pemetaan Kolom & Skrip Otomasi GAS)
+  const [techMenuOpen, setTechMenuOpen] = useState(false);
+  const techMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setTechMenuOpen(false);
+      return;
+    }
+    if (!techMenuOpen) return;
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (techMenuRef.current && !techMenuRef.current.contains(event.target as Node)) {
+        setTechMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setTechMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isOpen, techMenuOpen]);
 
   // Interval Live Auto-Sync
   useEffect(() => {
@@ -622,7 +655,7 @@ function perbaikiHasilNolDiRekap() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-1.5 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
       <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl overflow-hidden flex flex-col max-h-[96dvh] sm:max-h-[94vh]">
-        {/* Header - Compact & Sleek */}
+        {/* Header - Compact & Sleek with Live Sheet Route Subtitle */}
         <div className="px-3.5 sm:px-5 py-2 sm:py-2.5 border-b border-slate-800 flex items-center justify-between gap-2 bg-gradient-to-r from-slate-900 via-slate-850 to-indigo-950 text-white shrink-0">
           <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
             <span className="p-1.5 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-400/30 shrink-0">
@@ -633,13 +666,39 @@ function perbaikiHasilNolDiRekap() {
                 <h3 className="text-xs sm:text-sm font-bold text-white tracking-tight truncate">
                   Integrasi &amp; Sinkronisasi DHP Krosok
                 </h3>
-                <span className="hidden xs:inline-block sm:inline-block text-[10px] font-semibold text-emerald-300">
+                <span className="hidden sm:inline-block text-[10.5px] font-semibold text-emerald-300">
                   · Presisi 100%
                 </span>
               </div>
-              <p className="hidden sm:block text-[11px] text-slate-300 leading-none mt-0.5 truncate">
-                Pencocokan dan transfer otomatis data aktif DHP Krosok ke Datasheet Rekap Susut Krosok
-              </p>
+              <div className="flex items-center gap-1.5 text-[10.5px] sm:text-[11px] text-slate-300 leading-tight mt-0.5 min-w-0 flex-wrap">
+                <span
+                  className="inline-flex items-center gap-1 min-w-0"
+                  title={`Spreadsheet Sumber DHP: ${config.dhpSheetName} (${config.dhpSpreadsheetId})`}
+                >
+                  <span className="text-slate-400 hidden sm:inline">Sumber DHP:</span>
+                  <span className="text-slate-400 sm:hidden">DHP:</span>
+                  <span className="font-mono font-semibold text-sky-300 truncate max-w-[110px] sm:max-w-none">
+                    {config.dhpSheetName}
+                  </span>
+                  <span className="hidden lg:inline font-mono text-[10px] text-slate-400">
+                    ({config.dhpSpreadsheetId.slice(0, 8)}…)
+                  </span>
+                </span>
+                <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
+                <span
+                  className="inline-flex items-center gap-1 min-w-0"
+                  title={`Spreadsheet Target Rekap: ${config.sheetName} (${config.spreadsheetId})`}
+                >
+                  <span className="text-slate-400 hidden sm:inline">Target Rekap:</span>
+                  <span className="text-slate-400 sm:hidden">Rekap:</span>
+                  <span className="font-mono font-semibold text-emerald-300 truncate max-w-[125px] sm:max-w-none">
+                    {config.sheetName}
+                  </span>
+                  <span className="hidden lg:inline font-mono text-[10px] text-slate-400">
+                    ({config.spreadsheetId.slice(0, 8)}…)
+                  </span>
+                </span>
+              </div>
             </div>
           </div>
           <button
@@ -651,40 +710,76 @@ function perbaikiHasilNolDiRekap() {
           </button>
         </div>
 
-        {/* Source & Target Connectors - Responsive Strip with Touch-Friendly Controls */}
-        <div className="px-3.5 sm:px-5 py-1.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 text-xs shrink-0">
-          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap text-[10.5px] sm:text-[11px] min-w-0">
-            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-white rounded border border-slate-200 text-slate-700 shadow-2xs">
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0"></span>
-              <span className="font-semibold text-slate-500 hidden sm:inline">Sumber DHP:</span>
-              <span className="font-semibold text-slate-500 sm:hidden">DHP:</span>
-              <span className="font-mono text-blue-700 font-bold truncate max-w-[115px] sm:max-w-none">
-                {config.dhpSheetName}
+        {/* Unified Single-Row Operational Navigation & Live Sync Control Bar */}
+        <div className="relative z-30 px-3.5 sm:px-5 py-1.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 shrink-0">
+          {/* Left: Segmented Toggle for Daily Operational Views */}
+          <div
+            role="tablist"
+            aria-label="Navigasi Operasional DHP"
+            className="flex items-center gap-0.5 p-0.5 bg-slate-200/75 rounded-lg border border-slate-200/80 w-full sm:w-auto"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'preview'}
+              onClick={() => {
+                setActiveTab('preview');
+                setTechMenuOpen(false);
+              }}
+              className={`min-h-[36px] sm:min-h-[30px] flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === 'preview'
+                  ? 'bg-white text-blue-700 shadow-2xs ring-1 ring-slate-900/5'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5 shrink-0" />
+              <span className="hidden md:inline">Pratinjau &amp; Transaksi</span>
+              <span className="md:hidden">Pratinjau</span>
+              <span className="font-mono tabular-nums text-[11px] opacity-85">
+                ({dhpItems.length}
+                <span className="hidden sm:inline"> Batch</span>)
               </span>
-              <span className="text-[10px] text-slate-400 font-mono hidden lg:inline">
-                ({config.dhpSpreadsheetId.slice(0, 8)}...)
-              </span>
-            </div>
+            </button>
 
-            <ArrowRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-400 shrink-0" />
-
-            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-white rounded border border-slate-200 text-slate-700 shadow-2xs">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
-              <span className="font-semibold text-slate-500 hidden sm:inline">Target Rekap:</span>
-              <span className="font-semibold text-slate-500 sm:hidden">Rekap:</span>
-              <span className="font-mono text-emerald-700 font-bold truncate max-w-[125px] sm:max-w-none">
-                {config.sheetName}
-              </span>
-              <span className="text-[10px] text-slate-400 font-mono hidden lg:inline">
-                ({config.spreadsheetId.slice(0, 8)}...)
-              </span>
-            </div>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'analisis_harian'}
+              onClick={() => {
+                setActiveTab('analisis_harian');
+                setTechMenuOpen(false);
+              }}
+              className={`min-h-[36px] sm:min-h-[30px] flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                activeTab === 'analisis_harian'
+                  ? 'bg-white text-amber-800 shadow-2xs ring-1 ring-slate-900/5'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+              }`}
+            >
+              <TrendingUp className="w-3.5 h-3.5 shrink-0" />
+              <span>Analisis Harian</span>
+              {oosBatchCount + waspadaBatchCount > 0 ? (
+                <span
+                  className={`text-[10.5px] font-bold font-mono tabular-nums ${
+                    oosBatchCount > 0 ? 'text-rose-600' : 'text-amber-600'
+                  }`}
+                >
+                  · {oosBatchCount + waspadaBatchCount}
+                  <span className="hidden lg:inline"> Deviasi</span>
+                </span>
+              ) : (
+                <span className="hidden lg:inline text-[10.5px] font-medium text-slate-400">
+                  · Deviasi
+                </span>
+              )}
+            </button>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto justify-end">
+          {/* Right: Live Sync Controls + Dynamic Technical Utilities Dropdown */}
+          <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end">
             <button
+              type="button"
               onClick={() => setIsLiveSyncActive(!isLiveSyncActive)}
-              className={`min-h-[36px] sm:min-h-0 flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 sm:py-1 rounded-md text-[11px] font-semibold border transition-all cursor-pointer ${
+              className={`min-h-[36px] sm:min-h-[32px] flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-all cursor-pointer ${
                 isLiveSyncActive
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs'
                   : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
@@ -696,15 +791,16 @@ function perbaikiHasilNolDiRekap() {
                   isLiveSyncActive ? 'bg-emerald-500 animate-ping' : 'bg-slate-400'
                 }`}
               ></span>
-              <span className="whitespace-nowrap">
+              <span className="whitespace-nowrap font-mono tabular-nums">
                 {isLiveSyncActive ? `Auto-Tarik (${countdown}s)` : 'Auto-Tarik Dijeda'}
               </span>
             </button>
 
             <button
+              type="button"
               onClick={handleRefresh}
               disabled={refreshing}
-              className="min-h-[36px] sm:min-h-0 flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 sm:py-1 rounded-md text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-2xs disabled:opacity-50 cursor-pointer whitespace-nowrap"
+              className="min-h-[36px] sm:min-h-[32px] flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-2xs disabled:opacity-50 cursor-pointer whitespace-nowrap"
               title="Tarik instan data DHP dari Google Spreadsheet sekarang (Bypass cache)"
             >
               <RefreshCw
@@ -714,68 +810,132 @@ function perbaikiHasilNolDiRekap() {
               />
               <span>{refreshing ? 'Memeriksa...' : 'Tarik Ulang DHP'}</span>
             </button>
-          </div>
-        </div>
 
-        {/* Tab Navigation - Horizontally Scrollable on Narrow Phones */}
-        <div className="flex overflow-x-auto whitespace-nowrap border-b border-slate-200 bg-white px-3.5 sm:px-5 shrink-0">
-          <button
-            onClick={() => setActiveTab('preview')}
-            className={`min-h-[40px] sm:min-h-0 flex items-center gap-1.5 py-2 px-3 text-xs font-semibold border-b-2 transition-colors shrink-0 cursor-pointer ${
-              activeTab === 'preview'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5 shrink-0" />
-            <span>Pratinjau &amp; Transaksi ({dhpItems.length} Batch)</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('analisis_harian')}
-            className={`min-h-[40px] sm:min-h-0 flex items-center gap-1.5 py-2 px-3 text-xs font-semibold border-b-2 transition-colors shrink-0 cursor-pointer ${
-              activeTab === 'analisis_harian'
-                ? 'border-amber-600 text-amber-700'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <TrendingUp className="w-3.5 h-3.5 shrink-0" />
-            <span>Analisis Harian</span>
-            {oosBatchCount + waspadaBatchCount > 0 ? (
-              <span
-                className={`text-[10.5px] font-bold ${
-                  oosBatchCount > 0 ? 'text-rose-600' : 'text-amber-600'
+            {/* Dynamic Dropdown for Technical Utilities (Pemetaan Kolom & Skrip Otomasi GAS) */}
+            <div ref={techMenuRef} className="relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setTechMenuOpen((prev) => !prev)}
+                aria-expanded={techMenuOpen}
+                aria-haspopup="menu"
+                title="Utilitas Teknis: Pemetaan Kolom & Skrip Otomasi GAS"
+                className={`min-h-[36px] sm:min-h-[32px] inline-flex items-center justify-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border transition-all cursor-pointer ${
+                  activeTab === 'mapping' || activeTab === 'script'
+                    ? 'bg-indigo-50 text-indigo-700 border-indigo-300 shadow-2xs'
+                    : techMenuOpen
+                    ? 'bg-slate-200/80 text-slate-900 border-slate-300'
+                    : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100 hover:text-slate-900 shadow-2xs'
                 }`}
               >
-                · {oosBatchCount + waspadaBatchCount} Deviasi
-              </span>
-            ) : (
-              <span className="text-[10.5px] font-medium text-slate-400">· Deviasi</span>
-            )}
-          </button>
+                {activeTab === 'script' ? (
+                  <Code2 className="w-3.5 h-3.5 shrink-0 text-indigo-600" />
+                ) : activeTab === 'mapping' ? (
+                  <ShieldCheck className="w-3.5 h-3.5 shrink-0 text-indigo-600" />
+                ) : (
+                  <Settings2 className="w-3.5 h-3.5 shrink-0" />
+                )}
+                {(activeTab === 'mapping' || activeTab === 'script') && (
+                  <span className="hidden xs:inline sm:inline whitespace-nowrap">
+                    {activeTab === 'mapping' ? 'Pemetaan Kolom' : 'Skrip GAS'}
+                  </span>
+                )}
+                <ChevronDown
+                  className={`w-3 h-3 shrink-0 transition-transform ${
+                    techMenuOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
 
-          <button
-            onClick={() => setActiveTab('mapping')}
-            className={`min-h-[40px] sm:min-h-0 flex items-center gap-1.5 py-2 px-3 text-xs font-semibold border-b-2 transition-colors shrink-0 cursor-pointer ${
-              activeTab === 'mapping'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-            <span>Pemetaan Kolom</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('script')}
-            className={`min-h-[40px] sm:min-h-0 flex items-center gap-1.5 py-2 px-3 text-xs font-semibold border-b-2 transition-colors shrink-0 cursor-pointer ${
-              activeTab === 'script'
-                ? 'border-blue-600 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <Code2 className="w-3.5 h-3.5 shrink-0" />
-            <span>Skrip Otomasi GAS</span>
-          </button>
+              {techMenuOpen && (
+                <div
+                  role="menu"
+                  aria-label="Menu Utilitas Teknis"
+                  className="absolute right-0 top-full mt-1.5 w-72 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-50 animate-in fade-in"
+                >
+                  <div className="px-3 py-1 text-[11px] font-semibold text-slate-400">
+                    Utilitas &amp; Konfigurasi Teknis
+                  </div>
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setActiveTab('mapping');
+                      setTechMenuOpen(false);
+                    }}
+                    className={`w-full px-3 py-2 text-left flex items-start gap-2.5 transition-colors cursor-pointer ${
+                      activeTab === 'mapping'
+                        ? 'bg-blue-50/80 text-blue-800'
+                        : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <ShieldCheck
+                      className={`w-4 h-4 mt-0.5 shrink-0 ${
+                        activeTab === 'mapping' ? 'text-blue-600' : 'text-slate-400'
+                      }`}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold">Pemetaan Kolom</span>
+                        {activeTab === 'mapping' && (
+                          <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-snug mt-0.5">
+                        Verifikasi relasi kolom DHP ke Rekap &amp; proteksi rumus C, D, J, K
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setActiveTab('script');
+                      setTechMenuOpen(false);
+                    }}
+                    className={`w-full px-3 py-2 text-left flex items-start gap-2.5 transition-colors cursor-pointer ${
+                      activeTab === 'script'
+                        ? 'bg-blue-50/80 text-blue-800'
+                        : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Code2
+                      className={`w-4 h-4 mt-0.5 shrink-0 ${
+                        activeTab === 'script' ? 'text-blue-600' : 'text-slate-400'
+                      }`}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold">Skrip Otomasi GAS</span>
+                        {activeTab === 'script' && (
+                          <Check className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-snug mt-0.5">
+                        Kode Google Apps Script sinkronisasi langsung DHP Krosok
+                      </p>
+                    </div>
+                  </button>
+
+                  <div className="mt-1 pt-1.5 px-3 pb-1 border-t border-slate-100 text-[10.5px] text-slate-500 space-y-0.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span>ID DHP ({config.dhpSheetName}):</span>
+                      <span className="font-mono text-slate-700 truncate max-w-[120px]">
+                        {config.dhpSpreadsheetId.slice(0, 12)}…
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <span>ID Rekap ({config.sheetName}):</span>
+                      <span className="font-mono text-slate-700 truncate max-w-[120px]">
+                        {config.spreadsheetId.slice(0, 12)}…
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Modal Body */}
@@ -2231,12 +2391,23 @@ function perbaikiHasilNolDiRekap() {
                 <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>Koneksi aman &amp; pemetaan kolom terverifikasi</span>
               </span>
-              <button
-                onClick={onClose}
-                className="min-h-[38px] sm:min-h-0 px-4 py-1.5 rounded-lg text-xs font-semibold bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors cursor-pointer self-end sm:self-auto"
-              >
-                Tutup
-              </button>
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('preview')}
+                  className="min-h-[38px] sm:min-h-[36px] flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors cursor-pointer"
+                >
+                  <Layers className="w-3.5 h-3.5 shrink-0" />
+                  <span>Kembali ke Pratinjau</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="min-h-[38px] sm:min-h-[36px] px-4 py-1.5 rounded-lg text-xs font-semibold bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors cursor-pointer shrink-0"
+                >
+                  Tutup
+                </button>
+              </div>
             </>
           )}
         </div>
