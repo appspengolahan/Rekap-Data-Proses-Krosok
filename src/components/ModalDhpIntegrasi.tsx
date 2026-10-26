@@ -35,7 +35,12 @@ import {
   KrosokStandarAcuan,
   TacticalBatchEvaluation
 } from '../types';
-import { formatNum, formatPct, round2 } from '../services/dataService';
+import {
+  formatNum,
+  formatPct,
+  getDhpActiveSheetDateLabel,
+  round2
+} from '../services/dataService';
 import {
   DEFAULT_BASELINE_META,
   evaluateDhpBatch,
@@ -123,6 +128,7 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
 
   if (!isOpen) return null;
 
+  const activeSheetDateLabel = getDhpActiveSheetDateLabel();
   const evalValues = Object.values(tacticalMap);
   const normalBatchCount = evalValues.filter((e) => e.status === 'normal').length;
   const waspadaBatchCount = evalValues.filter((e) => e.status === 'waspada').length;
@@ -130,6 +136,10 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
   const untaggedOosCount = evalValues.filter(
     (e) => e.status === 'oos' && e.tags.length === 0
   ).length;
+
+  const isDesktopHoverCapable = () =>
+    typeof window !== 'undefined' &&
+    window.matchMedia('(hover: hover) and (min-width: 1024px)').matches;
 
   const openQuickTagEditor = (
     item: DhpKrosokItem,
@@ -599,121 +609,142 @@ function perbaikiHasilNolDiRekap() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl overflow-hidden flex flex-col max-h-[94vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-1.5 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+      <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl overflow-hidden flex flex-col max-h-[96dvh] sm:max-h-[94vh]">
         {/* Header - Compact & Sleek */}
-        <div className="px-5 py-2.5 border-b border-slate-800 flex items-center justify-between bg-gradient-to-r from-slate-900 via-slate-850 to-indigo-950 text-white shrink-0">
-          <div className="flex items-center gap-2.5">
-            <span className="p-1.5 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-400/30">
+        <div className="px-3.5 sm:px-5 py-2 sm:py-2.5 border-b border-slate-800 flex items-center justify-between gap-2 bg-gradient-to-r from-slate-900 via-slate-850 to-indigo-950 text-white shrink-0">
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+            <span className="p-1.5 rounded-lg bg-blue-500/20 text-blue-300 border border-blue-400/30 shrink-0">
               <Database className="w-4 h-4" />
             </span>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-white tracking-tight">
-                  Integrasi & Sinkronisasi DHP Krosok
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-xs sm:text-sm font-bold text-white tracking-tight truncate">
+                  Integrasi &amp; Sinkronisasi DHP Krosok
                 </h3>
-                <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
-                  Presisi 100%
+                <span className="hidden xs:inline-block sm:inline-block text-[10px] font-semibold text-emerald-300">
+                  · Presisi 100%
                 </span>
               </div>
-              <p className="text-[11px] text-slate-300 leading-none mt-0.5">
+              <p className="hidden sm:block text-[11px] text-slate-300 leading-none mt-0.5 truncate">
                 Pencocokan dan transfer otomatis data aktif DHP Krosok ke Datasheet Rekap Susut Krosok
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+            aria-label="Tutup modal"
+            className="min-h-[36px] min-w-[36px] sm:min-h-0 sm:min-w-0 p-1.5 sm:p-1 inline-flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Source & Target Connectors - Compact Single-Line Strip */}
-        <div className="px-5 py-1.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
-          <div className="flex items-center gap-2 flex-wrap text-[11px]">
+        {/* Source & Target Connectors - Responsive Strip with Touch-Friendly Controls */}
+        <div className="px-3.5 sm:px-5 py-1.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 text-xs shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap text-[10.5px] sm:text-[11px] min-w-0">
             <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-white rounded border border-slate-200 text-slate-700 shadow-2xs">
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-              <span className="font-semibold text-slate-500">Sumber DHP:</span>
-              <span className="font-mono text-blue-700 font-bold">Tab {config.dhpSheetName}</span>
-              <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">({config.dhpSpreadsheetId.slice(0, 8)}...)</span>
+              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0"></span>
+              <span className="font-semibold text-slate-500 hidden sm:inline">Sumber DHP:</span>
+              <span className="font-semibold text-slate-500 sm:hidden">DHP:</span>
+              <span className="font-mono text-blue-700 font-bold truncate max-w-[115px] sm:max-w-none">
+                {config.dhpSheetName}
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono hidden lg:inline">
+                ({config.dhpSpreadsheetId.slice(0, 8)}...)
+              </span>
             </div>
 
-            <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <ArrowRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-400 shrink-0" />
 
             <div className="inline-flex items-center gap-1.5 px-2 py-0.5 bg-white rounded border border-slate-200 text-slate-700 shadow-2xs">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              <span className="font-semibold text-slate-500">Target Rekap:</span>
-              <span className="font-mono text-emerald-700 font-bold">Tab {config.sheetName}</span>
-              <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">({config.spreadsheetId.slice(0, 8)}...)</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+              <span className="font-semibold text-slate-500 hidden sm:inline">Target Rekap:</span>
+              <span className="font-semibold text-slate-500 sm:hidden">Rekap:</span>
+              <span className="font-mono text-emerald-700 font-bold truncate max-w-[125px] sm:max-w-none">
+                {config.sheetName}
+              </span>
+              <span className="text-[10px] text-slate-400 font-mono hidden lg:inline">
+                ({config.spreadsheetId.slice(0, 8)}...)
+              </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto justify-end">
             <button
               onClick={() => setIsLiveSyncActive(!isLiveSyncActive)}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-all ${
+              className={`min-h-[36px] sm:min-h-0 flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 sm:py-1 rounded-md text-[11px] font-semibold border transition-all cursor-pointer ${
                 isLiveSyncActive
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-300 shadow-2xs'
                   : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
               }`}
               title="Klik untuk mengaktifkan / menjeda penarikan data otomatis setiap 12 detik"
             >
-              <span className={`w-2 h-2 rounded-full ${isLiveSyncActive ? 'bg-emerald-500 animate-ping' : 'bg-slate-400'}`}></span>
-              <span>{isLiveSyncActive ? `Auto-Tarik Aktif (${countdown}s)` : 'Auto-Tarik Dijeda'}</span>
+              <span
+                className={`w-2 h-2 rounded-full shrink-0 ${
+                  isLiveSyncActive ? 'bg-emerald-500 animate-ping' : 'bg-slate-400'
+                }`}
+              ></span>
+              <span className="whitespace-nowrap">
+                {isLiveSyncActive ? `Auto-Tarik (${countdown}s)` : 'Auto-Tarik Dijeda'}
+              </span>
             </button>
 
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-2xs disabled:opacity-50"
+              className="min-h-[36px] sm:min-h-0 flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-1.5 sm:py-1 rounded-md text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white transition-colors shadow-2xs disabled:opacity-50 cursor-pointer whitespace-nowrap"
               title="Tarik instan data DHP dari Google Spreadsheet sekarang (Bypass cache)"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${refreshing || (isLiveSyncActive && countdown <= 2) ? 'animate-spin' : ''}`} />
+              <RefreshCw
+                className={`w-3.5 h-3.5 shrink-0 ${
+                  refreshing || (isLiveSyncActive && countdown <= 2) ? 'animate-spin' : ''
+                }`}
+              />
               <span>{refreshing ? 'Memeriksa...' : 'Tarik Ulang DHP'}</span>
             </button>
           </div>
         </div>
 
-        {/* Tab Navigation - Slim */}
-        <div className="flex border-b border-slate-200 bg-white px-5 shrink-0">
+        {/* Tab Navigation - Horizontally Scrollable on Narrow Phones */}
+        <div className="flex overflow-x-auto whitespace-nowrap border-b border-slate-200 bg-white px-3.5 sm:px-5 shrink-0">
           <button
             onClick={() => setActiveTab('preview')}
-            className={`flex items-center gap-1.5 py-2 px-3 text-xs font-semibold border-b-2 transition-colors ${
+            className={`min-h-[40px] sm:min-h-0 flex items-center gap-1.5 py-2 px-3 text-xs font-semibold border-b-2 transition-colors shrink-0 cursor-pointer ${
               activeTab === 'preview'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Layers className="w-3.5 h-3.5" />
-            <span>Pratinjau & Transaksi ({dhpItems.length} Batch)</span>
+            <Layers className="w-3.5 h-3.5 shrink-0" />
+            <span>Pratinjau &amp; Transaksi ({dhpItems.length} Batch)</span>
           </button>
           <button
             onClick={() => setActiveTab('mapping')}
-            className={`flex items-center gap-1.5 py-2 px-3 text-xs font-semibold border-b-2 transition-colors ${
+            className={`min-h-[40px] sm:min-h-0 flex items-center gap-1.5 py-2 px-3 text-xs font-semibold border-b-2 transition-colors shrink-0 cursor-pointer ${
               activeTab === 'mapping'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <ShieldCheck className="w-3.5 h-3.5" />
+            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
             <span>Pemetaan Kolom</span>
           </button>
           <button
             onClick={() => setActiveTab('script')}
-            className={`flex items-center gap-1.5 py-2 px-3 text-xs font-semibold border-b-2 transition-colors ${
+            className={`min-h-[40px] sm:min-h-0 flex items-center gap-1.5 py-2 px-3 text-xs font-semibold border-b-2 transition-colors shrink-0 cursor-pointer ${
               activeTab === 'script'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
             }`}
           >
-            <Code2 className="w-3.5 h-3.5" />
+            <Code2 className="w-3.5 h-3.5 shrink-0" />
             <span>Skrip Otomasi GAS</span>
           </button>
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3.5 flex flex-col min-h-0">
+        <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2.5 sm:space-y-3.5 flex flex-col min-h-0">
           {/* Success Notification */}
           {syncSuccessMsg && (
             <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2 animate-in fade-in shrink-0">
@@ -724,85 +755,112 @@ function perbaikiHasilNolDiRekap() {
 
           {/* TAB 1: PREVIEW & SYNC */}
           {activeTab === 'preview' && (
-            <div className="space-y-3 flex flex-col flex-1 min-h-0">
-              {/* Compact Metrics Strip */}
-              <div className={`grid grid-cols-1 ${needUpdateCount > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-2 shrink-0`}>
-                <div className="bg-slate-50 rounded-lg px-3.5 py-2.5 border border-slate-200/90 flex items-center justify-between shadow-2xs">
-                  <div>
-                    <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                      Total Batch Aktif DHP
+            <div className="space-y-2.5 sm:space-y-3 flex flex-col flex-1 min-h-0">
+              {/* Compact 3-Column Metrics Strip on Phone, Tablet & Desktop */}
+              <div
+                className={`grid ${
+                  needUpdateCount > 0
+                    ? 'grid-cols-2 lg:grid-cols-4'
+                    : 'grid-cols-3'
+                } gap-1.5 sm:gap-2 shrink-0`}
+              >
+                <div className="bg-slate-50 rounded-lg px-2.5 py-2 sm:px-3.5 sm:py-2.5 border border-slate-200/90 flex items-center justify-between shadow-2xs min-w-0">
+                  <div className="min-w-0">
+                    <div className="text-[9.5px] sm:text-[10px] font-semibold text-slate-500 truncate">
+                      <span className="sm:hidden">Aktif DHP</span>
+                      <span className="hidden sm:inline">Total Batch Aktif DHP</span>
                     </div>
-                    <div className="text-base font-bold text-slate-900 mt-0.5 flex items-baseline gap-1.5 flex-wrap">
+                    <div className="text-xs sm:text-base font-bold text-slate-900 mt-0.5 flex items-baseline gap-1 sm:gap-1.5 flex-wrap tabular-nums">
                       <span>{dhpItems.length} Batch</span>
-                      <span className="text-[11px] font-semibold text-blue-700 bg-blue-50/90 px-1.5 py-0.5 rounded border border-blue-200/80">
-                        {formatNum(totalBaku)} Kg Baku
+                      <span className="text-[10px] sm:text-[11px] font-semibold text-blue-700 font-mono">
+                        {formatNum(totalBaku)} Kg
                       </span>
                     </div>
-                    <div className="text-[10px] text-slate-500 mt-0.5 font-medium">
+                    <div className="hidden sm:block text-[10px] text-slate-500 mt-0.5 font-medium truncate">
                       Bahan baku terinput di DHP
                     </div>
                   </div>
-                  <Layers className="w-4 h-4 text-slate-400 shrink-0" />
+                  <Layers className="hidden sm:block w-4 h-4 text-slate-400 shrink-0" />
                 </div>
 
-                <div className="bg-emerald-50/70 rounded-lg px-3.5 py-2.5 border border-emerald-200/90 flex items-center justify-between shadow-2xs">
-                  <div>
-                    <div className="text-[10px] font-semibold text-emerald-700 uppercase tracking-wider flex items-center gap-1.5">
-                      <span>Terverifikasi di Rekap</span>
-                      <span className="text-[9.5px] px-1.5 py-0.2 rounded-full bg-emerald-100 text-emerald-800 font-bold border border-emerald-200">
-                        {dhpItems.length ? Math.round((matchedCount / dhpItems.length) * 100) : 0}% Cocok
+                <div className="bg-emerald-50/70 rounded-lg px-2.5 py-2 sm:px-3.5 sm:py-2.5 border border-emerald-200/90 flex items-center justify-between shadow-2xs min-w-0">
+                  <div className="min-w-0">
+                    <div className="text-[9.5px] sm:text-[10px] font-semibold text-emerald-700 flex items-center gap-1 truncate">
+                      <span className="sm:hidden">Terverifikasi</span>
+                      <span className="hidden sm:inline">Terverifikasi di Rekap</span>
+                      <span className="hidden md:inline text-[9.5px] text-emerald-800 font-bold">
+                        · {dhpItems.length ? Math.round((matchedCount / dhpItems.length) * 100) : 0}%
                       </span>
                     </div>
-                    <div className="text-base font-bold text-emerald-800 mt-0.5 flex items-baseline gap-1.5 flex-wrap">
+                    <div className="text-xs sm:text-base font-bold text-emerald-800 mt-0.5 flex items-baseline gap-1 sm:gap-1.5 flex-wrap tabular-nums">
                       <span>{matchedCount} Batch</span>
-                      <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-100/90 px-1.5 py-0.5 rounded border border-emerald-300/80">
-                        {formatNum(verifiedHasil)} Kg Hasil
+                      <span className="text-[10px] sm:text-[11px] font-semibold text-emerald-800 font-mono">
+                        {formatNum(verifiedHasil)} Kg
                       </span>
                     </div>
-                    <div className="text-[10px] text-emerald-700 mt-0.5 font-medium flex items-center gap-1">
-                      <span>Susut: <strong>{formatNum(verifiedSusutKg)} Kg</strong></span>
-                      <span className="text-emerald-600/80">({formatPct(verifiedSusutPct)}%)</span>
+                    <div className="hidden sm:flex text-[10px] text-emerald-700 mt-0.5 font-medium items-center gap-1 tabular-nums">
+                      <span>
+                        Susut: <strong>{formatNum(verifiedSusutKg)} Kg</strong>
+                      </span>
+                      <span className="text-emerald-600/80">
+                        ({formatPct(verifiedSusutPct)}%)
+                      </span>
                     </div>
                   </div>
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <CheckCircle2 className="hidden sm:block w-4 h-4 text-emerald-600 shrink-0" />
                 </div>
 
                 {needUpdateCount > 0 && (
-                  <div className="bg-amber-50/90 rounded-lg px-3.5 py-2.5 border border-amber-300 flex items-center justify-between shadow-2xs animate-pulse">
-                    <div>
-                      <div className="text-[10px] font-bold text-amber-800 uppercase tracking-wider">
+                  <div className="bg-amber-50/90 rounded-lg px-2.5 py-2 sm:px-3.5 sm:py-2.5 border border-amber-300 flex items-center justify-between shadow-2xs animate-pulse min-w-0">
+                    <div className="min-w-0">
+                      <div className="text-[9.5px] sm:text-[10px] font-bold text-amber-800 truncate">
                         Perlu Diselaraskan
                       </div>
-                      <div className="text-base font-bold text-amber-900 mt-0.5 flex items-baseline gap-1.5">
+                      <div className="text-xs sm:text-base font-bold text-amber-900 mt-0.5 flex items-baseline gap-1 sm:gap-1.5 flex-wrap tabular-nums">
                         <span>{needUpdateCount} Batch</span>
-                        <span className="text-[11px] font-medium text-amber-700">Hasil Selesai</span>
+                        <span className="text-[10px] sm:text-[11px] font-medium text-amber-700">
+                          Update
+                        </span>
                       </div>
-                      <div className="text-[10px] text-amber-700 mt-0.5 font-medium">
+                      <div className="hidden sm:block text-[10px] text-amber-700 mt-0.5 font-medium truncate">
                         Hasil DHP siap diupdate ke Rekap
                       </div>
                     </div>
-                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <AlertCircle className="hidden sm:block w-4 h-4 text-amber-600 shrink-0" />
                   </div>
                 )}
 
-                <div className={`rounded-lg px-3.5 py-2.5 border flex items-center justify-between shadow-2xs ${
-                  newCount > 0 ? 'bg-blue-50/90 border-blue-200' : 'bg-slate-50 rounded-lg border-slate-200/90'
-                }`}>
-                  <div>
-                    <div className={`text-[10px] font-semibold uppercase tracking-wider ${newCount > 0 ? 'text-blue-700' : 'text-slate-500'}`}>
-                      Batch Selesai Siap Masuk
+                <div
+                  className={`rounded-lg px-2.5 py-2 sm:px-3.5 sm:py-2.5 border flex items-center justify-between shadow-2xs min-w-0 ${
+                    newCount > 0
+                      ? 'bg-blue-50/90 border-blue-200'
+                      : 'bg-slate-50 border-slate-200/90'
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div
+                      className={`text-[9.5px] sm:text-[10px] font-semibold truncate ${
+                        newCount > 0 ? 'text-blue-700' : 'text-slate-500'
+                      }`}
+                    >
+                      <span className="sm:hidden">Siap Masuk</span>
+                      <span className="hidden sm:inline">Batch Selesai Siap Masuk</span>
                     </div>
-                    <div className={`text-base font-bold mt-0.5 flex items-baseline gap-1.5 ${newCount > 0 ? 'text-blue-700' : 'text-slate-700'}`}>
+                    <div
+                      className={`text-xs sm:text-base font-bold mt-0.5 flex items-baseline gap-1 sm:gap-1.5 flex-wrap tabular-nums ${
+                        newCount > 0 ? 'text-blue-700' : 'text-slate-700'
+                      }`}
+                    >
                       <span>{newCount} Batch</span>
-                      <span className="text-[11px] font-normal text-slate-500">
+                      <span className="text-[10px] sm:text-[11px] font-normal text-slate-500 truncate">
                         {newCount > 0
-                          ? 'Siap dibukukan'
+                          ? 'Siap rekap'
                           : inProgressCount > 0
-                          ? `${inProgressCount} sedang proses`
-                          : 'Semua tersinkron'}
+                          ? `${inProgressCount} proses`
+                          : 'Sinkron'}
                       </span>
                     </div>
-                    <div className="text-[10px] text-slate-500 mt-0.5 font-medium">
+                    <div className="hidden sm:block text-[10px] text-slate-500 mt-0.5 font-medium truncate">
                       {newCount > 0
                         ? `${newCount} batch selesai ditimbang`
                         : inProgressCount > 0
@@ -811,31 +869,31 @@ function perbaikiHasilNolDiRekap() {
                     </div>
                   </div>
                   {newCount > 0 ? (
-                    <Sparkles className="w-4 h-4 text-blue-600 animate-pulse shrink-0" />
+                    <Sparkles className="hidden sm:block w-4 h-4 text-blue-600 animate-pulse shrink-0" />
                   ) : (
-                    <ShieldCheck className="w-4 h-4 text-slate-400 shrink-0" />
+                    <ShieldCheck className="hidden sm:block w-4 h-4 text-slate-400 shrink-0" />
                   )}
                 </div>
               </div>
 
               {/* Tactical Control Bar: Acuan Aktif, Cuaca Pabrik & Ringkasan Deviasi Harian */}
-              <div className="px-3.5 py-2 rounded-lg bg-slate-900 text-white flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold text-sky-300">
-                    Tactical Control:
-                  </span>
+              <div className="px-3 sm:px-3.5 py-2 rounded-lg bg-slate-900 text-white flex flex-wrap items-center justify-between gap-2 text-xs shrink-0">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] sm:text-xs">
+                  <span className="font-semibold text-sky-300">Tactical Control:</span>
                   <span className="text-slate-300">
-                    Acuan Aktif <strong className="text-white">{baselineMeta.periodeLabel}</strong>
+                    Acuan <strong className="text-white">{baselineMeta.periodeLabel}</strong>
                   </span>
                   {weatherData && (
                     <>
-                      <span className="text-slate-600" aria-hidden="true">·</span>
-                      <span className="inline-flex items-center gap-1 text-slate-300 font-mono text-[11px]">
-                        <Thermometer className="w-3 h-3 text-amber-400" />
+                      <span className="text-slate-600" aria-hidden="true">
+                        ·
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-slate-300 font-mono text-[11px] tabular-nums">
+                        <Thermometer className="w-3 h-3 text-amber-400 shrink-0" />
                         <span>{weatherData.temperature.toFixed(1)}°C</span>
-                        <Droplets className="w-3 h-3 text-sky-400 ml-1" />
+                        <Droplets className="w-3 h-3 text-sky-400 ml-0.5 shrink-0" />
                         <span>RH {Math.round(weatherData.humidity)}%</span>
-                        <span className="font-sans text-slate-400">
+                        <span className="font-sans text-slate-400 hidden sm:inline">
                           ({weatherData.hygroIndex.status})
                         </span>
                       </span>
@@ -843,18 +901,20 @@ function perbaikiHasilNolDiRekap() {
                   )}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                  <span className="font-mono text-emerald-300">
-                    Normal: {normalBatchCount}
-                  </span>
-                  <span className="text-slate-600">·</span>
-                  <span className="font-mono text-amber-300">
-                    Waspada: {waspadaBatchCount}
-                  </span>
-                  <span className="text-slate-600">·</span>
-                  <span className="font-mono text-rose-300 font-bold">
-                    OOS: {oosBatchCount}
-                  </span>
+                <div className="flex flex-wrap items-center justify-between sm:justify-end gap-2 text-[11px] w-full sm:w-auto pt-1 sm:pt-0 border-t border-slate-800 sm:border-0">
+                  <div className="flex items-center gap-1.5 tabular-nums">
+                    <span className="font-mono text-emerald-300">
+                      Normal: {normalBatchCount}
+                    </span>
+                    <span className="text-slate-600">·</span>
+                    <span className="font-mono text-amber-300">
+                      Waspada: {waspadaBatchCount}
+                    </span>
+                    <span className="text-slate-600">·</span>
+                    <span className="font-mono text-rose-300 font-bold">
+                      OOS: {oosBatchCount}
+                    </span>
+                  </div>
                   {onNavigateToAnalisisTab && (
                     <button
                       type="button"
@@ -862,358 +922,628 @@ function perbaikiHasilNolDiRekap() {
                         onClose();
                         onNavigateToAnalisisTab();
                       }}
-                      className="ml-1 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 text-[10px] font-semibold transition-colors cursor-pointer"
+                      className="min-h-[32px] sm:min-h-0 inline-flex items-center gap-1 px-2.5 py-1 sm:py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-sky-300 border border-slate-700 text-[10.5px] sm:text-[10px] font-semibold transition-colors cursor-pointer"
                     >
-                      <Sliders className="w-3 h-3" />
+                      <Sliders className="w-3 h-3 shrink-0" />
                       <span>Evaluasi &amp; Acuan</span>
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* Table of DHP Items - The Main Hero Component */}
-              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs flex-1 flex flex-col min-h-[280px] bg-white">
-                <div className="px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 shrink-0">
-                  <div className="flex items-center gap-2">
-                    <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600" />
-                    <span className="text-xs font-bold text-slate-800">
+              {/* Transaction Container: Mobile Cards (< 768px) + Sticky-Column Table (>= 768px) */}
+              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs flex-1 flex flex-col min-h-[220px] sm:min-h-[260px] bg-white">
+                <div className="px-3 sm:px-3.5 py-2 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 shrink-0">
+                  <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                    <FileSpreadsheet className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                    <span className="text-[11px] sm:text-xs font-bold text-slate-800 truncate">
                       Daftar Transaksi DHP Terdeteksi (Tab {config.dhpSheetName})
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-[11px]">
-                    <span className="text-slate-500 font-medium hidden sm:inline">
+                  <div className="flex items-center gap-2 text-[10.5px] sm:text-[11px] w-full sm:w-auto justify-between sm:justify-end">
+                    <span className="text-slate-500 font-medium">
                       {dhpItems.length} baris aktif
                     </span>
-                    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[11px] shadow-2xs text-slate-600 font-medium">
-                      <span>Baku: <strong className="text-slate-900 font-mono font-semibold">{formatNum(totalBaku)}</strong></span>
+                    <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white border border-slate-200 text-[10.5px] sm:text-[11px] shadow-2xs text-slate-600 font-medium tabular-nums">
+                      <span>
+                        Baku:{' '}
+                        <strong className="text-slate-900 font-mono font-semibold">
+                          {formatNum(totalBaku)}
+                        </strong>
+                      </span>
                       <span className="text-slate-300">|</span>
-                      <span>Hasil: <strong className="text-emerald-700 font-mono font-semibold">{formatNum(totalHasil)}</strong></span>
+                      <span>
+                        Hasil:{' '}
+                        <strong className="text-emerald-700 font-mono font-semibold">
+                          {formatNum(totalHasil)}
+                        </strong>
+                      </span>
                       <span className="text-slate-300">|</span>
-                      <span>Susut: <strong className="text-rose-600 font-mono font-semibold">{formatNum(totalSusutKg)} Kg</strong> <span className="text-slate-400 text-[10px]">({formatPct(overallSusutPct)}%)</span></span>
+                      <span>
+                        Susut:{' '}
+                        <strong className="text-rose-600 font-mono font-semibold">
+                          {formatNum(totalSusutKg)} Kg
+                        </strong>{' '}
+                        <span className="text-slate-400 text-[10px]">
+                          ({formatPct(overallSusutPct)}%)
+                        </span>
+                      </span>
                     </div>
                   </div>
                 </div>
 
-                <div
-                  className="overflow-auto flex-1 max-h-[430px]"
-                  onScroll={() => {
-                    if (diagPopover) setDiagPopover(null);
-                  }}
-                >
-                  <table className="w-full text-xs text-left">
-                    <thead className="sticky top-0 bg-slate-100 z-10 text-slate-700 font-semibold border-b border-slate-200 uppercase text-[10px] tracking-wider shadow-2xs">
-                      <tr>
-                        <th className="py-2 px-2.5 text-center w-12">Row</th>
-                        <th className="py-2 px-3">Tanggal &amp; Waktu</th>
-                        <th className="py-2 px-3">Jenis Krosok</th>
-                        <th className="py-2 px-2 text-center w-14">Jalur</th>
-                        <th className="py-2 px-2.5 text-right">Baku (Kg)</th>
-                        <th className="py-2 px-2.5 text-right">Hasil (Kg)</th>
-                        <th className="py-2 px-2.5 text-right text-rose-700">Susut (Kg)</th>
-                        <th className="py-2 px-2.5 text-right text-rose-700">Susut (%)</th>
-                        <th className="py-2 px-3 text-center">Status Deviasi</th>
-                        <th className="py-2 px-3">Quick Tag Lapangan</th>
-                        <th className="py-2 px-3 text-center">Status Rekap</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-slate-700">
-                      {dhpItems.length === 0 ? (
-                        <tr>
-                          <td colSpan={11} className="py-10 text-center text-slate-400">
-                            Tidak ditemukan baris transaksi aktif pada Sheet DHP Krosok.
-                          </td>
-                        </tr>
-                      ) : (
-                        dhpItems.map((item) => {
-                          const evalItem = tacticalMap[item.id];
-                          return (
-                            <tr
-                              key={item.id}
-                              className={`hover:bg-blue-50/40 transition-colors ${
-                                evalItem?.status === 'oos' ? 'bg-rose-50/25' : ''
-                              }`}
-                            >
-                              <td className="py-2 px-2.5 text-center font-mono text-[11px] text-slate-400">
-                                {item.rowIdx}
-                              </td>
-                              <td className="py-2 px-3 font-medium text-slate-800 whitespace-nowrap">
-                                <div>{item.tanggalDisplay}</div>
-                                {item.waktu && (
-                                  <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
-                                    <Clock className="w-3 h-3" />
-                                    <span>{item.waktu}</span>
-                                  </div>
-                                )}
-                              </td>
-                              <td className="py-2 px-3 font-semibold text-slate-900">
-                                <div>{item.jenisTembakau}</div>
-                                {item.kodeStock && (
-                                  <div className="text-[10px] text-slate-400 font-normal font-mono">
-                                    Stock: {item.kodeStock}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="py-2 px-2 text-center">
-                                <span
-                                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                    item.jalurProses === 'SKT'
-                                      ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                                      : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                {dhpItems.length === 0 ? (
+                  /* Informative Live Morning / Empty State (Zero Dummy Data) */
+                  <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 sm:py-10 text-center bg-white">
+                    <div className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 mb-2.5">
+                      <Calendar className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <p className="text-xs sm:text-sm font-semibold text-slate-800 max-w-md">
+                      Belum ada baris transaksi batch yang diinput pada Sheet DHP Krosok.
+                    </p>
+                    {activeSheetDateLabel && (
+                      <p className="text-[11px] sm:text-xs text-slate-600 mt-1 max-w-lg">
+                        Tanggal aktif Sheet{' '}
+                        <span className="font-mono font-semibold text-blue-700">
+                          {config.dhpSheetName}
+                        </span>
+                        :{' '}
+                        <strong className="text-slate-900">{activeSheetDateLabel}</strong> ·
+                        Koneksi live terhubung dan siaga menunggu input timbangan pertama.
+                      </p>
+                    )}
+                    <p className="text-[11px] text-slate-400 mt-1.5 max-w-md">
+                      {isLiveSyncActive
+                        ? `Auto-Tarik memantau Sheet DHP otomatis setiap 12 detik (cek berikutnya dalam ${countdown}s).`
+                        : 'Klik tombol "Tarik Ulang DHP" atau aktifkan Auto-Tarik untuk memeriksa input terbaru.'}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* MOBILE BATCH CARDS (< 768px / Smartphone) */}
+                    <div className="md:hidden flex-1 overflow-y-auto divide-y divide-slate-200">
+                      {dhpItems.map((item) => {
+                        const evalItem = tacticalMap[item.id];
+                        return (
+                          <div
+                            key={item.id}
+                            className={`p-3 space-y-2.5 ${
+                              evalItem?.status === 'oos' ? 'bg-rose-50/30' : 'bg-white'
+                            }`}
+                          >
+                            {/* Top Row: Variant + Jalur + Tappable Deviation Status */}
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-mono text-[10px] text-slate-400">
+                                    #{item.rowIdx}
+                                  </span>
+                                  <span className="text-xs font-bold text-slate-900 leading-snug">
+                                    {item.jenisTembakau}
+                                  </span>
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                      item.jalurProses === 'SKT'
+                                        ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                        : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                    }`}
+                                  >
+                                    {item.jalurProses}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-0.5 flex-wrap">
+                                  <span>{item.tanggalDisplay}</span>
+                                  {item.waktu && (
+                                    <>
+                                      <span aria-hidden="true">·</span>
+                                      <span className="font-mono">{item.waktu}</span>
+                                    </>
+                                  )}
+                                  {item.kodeStock && (
+                                    <>
+                                      <span aria-hidden="true">·</span>
+                                      <span className="font-mono text-[10.5px]">
+                                        Stock {item.kodeStock}
+                                      </span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+
+                              {evalItem && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    const r = e.currentTarget.getBoundingClientRect();
+                                    setDiagPopover({
+                                      item,
+                                      evalData: evalItem,
+                                      rect: {
+                                        top: r.top,
+                                        left: r.left + r.width / 2,
+                                        bottom: r.bottom
+                                      }
+                                    });
+                                  }}
+                                  className={`min-h-[34px] px-2.5 py-1 rounded-lg border text-[10.5px] font-bold inline-flex items-center gap-1 shrink-0 cursor-pointer tabular-nums ${
+                                    evalItem.status === 'oos'
+                                      ? 'bg-rose-50 text-rose-700 border-rose-300 active:bg-rose-100'
+                                      : evalItem.status === 'waspada'
+                                      ? 'bg-amber-50 text-amber-800 border-amber-300 active:bg-amber-100'
+                                      : evalItem.status === 'proses'
+                                      ? 'bg-slate-100 text-slate-600 border-slate-200'
+                                      : 'bg-emerald-50 text-emerald-700 border-emerald-200 active:bg-emerald-100'
                                   }`}
                                 >
-                                  {item.jalurProses}
-                                </span>
-                              </td>
-                              <td className="py-2 px-2.5 text-right font-mono font-bold text-slate-900">
-                                {formatNum(item.baku)}
-                              </td>
-                              <td className="py-2 px-2.5 text-right font-mono font-medium text-slate-700">
-                                {item.hasil > 0 ? (
-                                  <span className="font-semibold text-emerald-800">{formatNum(item.hasil)}</span>
+                                  {evalItem.status === 'oos' && (
+                                    <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                                  )}
+                                  {evalItem.status === 'waspada' && (
+                                    <Info className="w-3 h-3 text-amber-600 shrink-0" />
+                                  )}
+                                  {evalItem.status === 'normal' && (
+                                    <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                                  )}
+                                  <span>
+                                    {evalItem.status === 'oos'
+                                      ? 'OOS'
+                                      : evalItem.status === 'waspada'
+                                      ? 'Waspada'
+                                      : evalItem.status === 'proses'
+                                      ? 'Proses'
+                                      : 'Normal'}
+                                  </span>
+                                  {evalItem.status !== 'proses' && (
+                                    <span className="font-mono text-[10px]">
+                                      ({evalItem.deviasiPct >= 0 ? '+' : ''}
+                                      {formatPct(evalItem.deviasiPct)}%)
+                                    </span>
+                                  )}
+                                </button>
+                              )}
+                            </div>
+
+                            {/* 3-Column Numeric Strip: Baku | Hasil | Susut */}
+                            <div className="grid grid-cols-3 gap-1.5 bg-slate-50 rounded-lg px-2.5 py-2 border border-slate-200/70 tabular-nums">
+                              <div>
+                                <div className="text-[10px] text-slate-500">Baku (Kg)</div>
+                                <div className="font-mono text-xs font-bold text-slate-900 mt-0.5">
+                                  {formatNum(item.baku)}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-slate-500">Hasil (Kg)</div>
+                                <div className="font-mono text-xs font-bold mt-0.5">
+                                  {item.hasil > 0 ? (
+                                    <span className="text-emerald-800">
+                                      {formatNum(item.hasil)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-amber-700 font-sans text-[11px] font-semibold">
+                                      0,0 (Proses)
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] text-slate-500">
+                                  Susut {evalItem ? `(Acuan ${formatPct(evalItem.acuanPct)}%)` : ''}
+                                </div>
+                                <div className="font-mono text-xs font-bold text-rose-700 mt-0.5">
+                                  {item.hasil > 0
+                                    ? `${formatNum(item.susutKg)} (${formatPct(item.susutPct)}%)`
+                                    : '-'}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Bottom Row: Rekap Status + Diagnosa & Quick Tag Actions */}
+                            <div className="flex items-center justify-between gap-2 pt-0.5">
+                              <div className="text-[11px] min-w-0">
+                                {item.needsUpdateInRekap ? (
+                                  <span className="font-semibold text-amber-800 inline-flex items-center gap-1">
+                                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                    <span>
+                                      Update Rekap ({formatNum(item.rekapHasil)} →{' '}
+                                      {formatNum(item.hasil)})
+                                    </span>
+                                  </span>
+                                ) : item.isMatchedInRekap ? (
+                                  <span className="font-semibold text-emerald-700 inline-flex items-center gap-1">
+                                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                    <span>Cocok di Rekap (Brs {item.matchedRow})</span>
+                                  </span>
+                                ) : item.hasil <= 0 ? (
+                                  <span className="text-slate-500 inline-flex items-center gap-1">
+                                    <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                    <span>Menunggu Netto Hasil</span>
+                                  </span>
                                 ) : (
-                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold bg-amber-50 text-amber-700 border border-amber-200" title="Proses belum selesai atau menunggu data hasil">
-                                    0,0 (Proses)
+                                  <span className="font-semibold text-blue-700 inline-flex items-center gap-1">
+                                    <Sparkles className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                    <span>Siap Masuk Rekap</span>
                                   </span>
                                 )}
-                              </td>
-                              <td className="py-2 px-2.5 text-right font-mono font-medium text-rose-700">
-                                {item.hasil > 0 ? formatNum(item.susutKg) : '-'}
-                              </td>
-                              <td className="py-2 px-2.5 text-right font-mono font-semibold text-slate-800">
-                                <div>
-                                  {item.hasil > 0 ? `${formatPct(item.susutPct)}%` : '-'}
-                                </div>
-                                {evalItem && (
-                                  <div className="text-[10px] text-slate-400 font-normal">
-                                    Acuan {formatPct(evalItem.acuanPct)}%
-                                  </div>
-                                )}
-                              </td>
+                              </div>
 
-                              {/* KOLOM BARU 1: STATUS DEVIASI + TOOLTIP DIAGNOSA KILAT */}
-                              <td className="py-2 px-3 text-center whitespace-nowrap">
-                                {evalItem && (
+                              {evalItem && (
+                                <div className="flex items-center gap-1.5 shrink-0">
                                   <button
                                     type="button"
-                                    onMouseEnter={(e) => {
+                                    onClick={(e) => {
                                       const r = e.currentTarget.getBoundingClientRect();
                                       setDiagPopover({
                                         item,
                                         evalData: evalItem,
-                                        rect: { top: r.top, left: r.left + r.width / 2, bottom: r.bottom }
+                                        rect: {
+                                          top: r.top,
+                                          left: r.left + r.width / 2,
+                                          bottom: r.bottom
+                                        }
                                       });
                                     }}
-                                    onMouseLeave={() => setDiagPopover(null)}
-                                    onClick={(e) => {
-                                      const r = e.currentTarget.getBoundingClientRect();
-                                      setDiagPopover((prev) =>
-                                        prev?.item.id === item.id
-                                          ? null
-                                          : {
-                                              item,
-                                              evalData: evalItem,
-                                              rect: { top: r.top, left: r.left + r.width / 2, bottom: r.bottom }
-                                            }
-                                      );
-                                    }}
-                                    className={`inline-flex flex-col items-center px-2 py-0.5 rounded-md border text-[10px] font-bold transition-colors cursor-pointer ${
-                                      evalItem.status === 'oos'
-                                        ? 'bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100'
-                                        : evalItem.status === 'waspada'
-                                        ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
-                                        : evalItem.status === 'proses'
-                                        ? 'bg-slate-100 text-slate-600 border-slate-200'
-                                        : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                    className="min-h-[34px] px-2.5 py-1 rounded-md text-[11px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 inline-flex items-center gap-1 cursor-pointer"
+                                  >
+                                    <Info className="w-3 h-3 text-slate-500 shrink-0" />
+                                    <span>Diagnosa</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => openQuickTagEditor(item, evalItem)}
+                                    className={`min-h-[34px] px-2.5 py-1 rounded-md text-[11px] font-semibold border inline-flex items-center gap-1 cursor-pointer ${
+                                      evalItem.tags.length > 0
+                                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                        : evalItem.status === 'oos'
+                                        ? 'bg-rose-50 text-rose-700 border-rose-200'
+                                        : 'bg-white text-slate-700 border-slate-200'
                                     }`}
                                   >
-                                    <span className="inline-flex items-center gap-1">
-                                      {evalItem.status === 'oos' && (
-                                        <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
-                                      )}
-                                      {evalItem.status === 'waspada' && (
-                                        <Info className="w-3 h-3 text-amber-600 shrink-0" />
-                                      )}
-                                      {evalItem.status === 'normal' && (
-                                        <Check className="w-3 h-3 text-emerald-600 shrink-0" />
-                                      )}
-                                      <span>
-                                        {evalItem.status === 'oos'
-                                          ? 'OOS'
-                                          : evalItem.status === 'waspada'
-                                          ? 'Waspada'
-                                          : evalItem.status === 'proses'
-                                          ? 'Proses'
-                                          : 'Normal'}
-                                      </span>
+                                    <Tag className="w-3 h-3 shrink-0" />
+                                    <span className="truncate max-w-[105px]">
+                                      {evalItem.tags.length > 0
+                                        ? `${evalItem.tags[0]}${
+                                            evalItem.tags.length > 1
+                                              ? ` +${evalItem.tags.length - 1}`
+                                              : ''
+                                          }`
+                                        : evalItem.status === 'oos'
+                                        ? 'Tandai Alasan'
+                                        : '+ Quick Tag'}
                                     </span>
-                                    {evalItem.status !== 'proses' && (
-                                      <span className="font-mono text-[9.5px] font-semibold opacity-90">
-                                        {evalItem.deviasiPct >= 0 ? '+' : ''}
-                                        {formatPct(evalItem.deviasiPct)}%
-                                      </span>
-                                    )}
                                   </button>
-                                )}
-                              </td>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
 
-                              {/* KOLOM BARU 2: QUICK TAG LAPANGAN (MANDOR) */}
-                              <td className="py-2 px-3">
-                                {evalItem && (
-                                  <div className="flex flex-col items-start gap-1">
-                                    {evalItem.tags.length > 0 ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => openQuickTagEditor(item, evalItem)}
-                                        className="text-left group cursor-pointer"
-                                        title="Klik untuk mengubah alasan lapangan"
-                                      >
-                                        <div className="text-[10.5px] font-semibold text-blue-700 group-hover:underline leading-tight">
-                                          {evalItem.tags[0]}
-                                          {evalItem.tags.length > 1 && (
-                                            <span className="text-slate-500 font-normal">
-                                              {' '}
-                                              +{evalItem.tags.length - 1}
-                                            </span>
-                                          )}
-                                        </div>
-                                        {evalItem.catatan && (
-                                          <div className="text-[10px] text-slate-500 truncate max-w-[140px]">
-                                            "{evalItem.catatan}"
-                                          </div>
+                    {/* TABLET & DESKTOP TABLE (>= 768px) with Sticky Variant Column */}
+                    <div
+                      className="hidden md:block overflow-auto flex-1 max-h-[430px]"
+                      onScroll={() => {
+                        if (diagPopover && isDesktopHoverCapable()) {
+                          setDiagPopover(null);
+                        }
+                      }}
+                    >
+                      <table className="w-full text-xs text-left">
+                        <thead className="sticky top-0 bg-slate-100 z-20 text-slate-700 font-semibold border-b border-slate-200 uppercase text-[10px] tracking-wider shadow-2xs">
+                          <tr>
+                            <th className="py-2 px-2.5 text-center w-12">Row</th>
+                            <th className="py-2 px-3 whitespace-nowrap">Tanggal &amp; Waktu</th>
+                            <th className="py-2 px-3 sticky left-0 z-30 bg-slate-100 shadow-[1px_0_0_0_rgba(203,213,225,0.8)]">
+                              Jenis Krosok
+                            </th>
+                            <th className="py-2 px-2 text-center w-14">Jalur</th>
+                            <th className="py-2 px-2.5 text-right whitespace-nowrap">
+                              Baku (Kg)
+                            </th>
+                            <th className="py-2 px-2.5 text-right whitespace-nowrap">
+                              Hasil (Kg)
+                            </th>
+                            <th className="py-2 px-2.5 text-right text-rose-700 whitespace-nowrap">
+                              Susut (Kg)
+                            </th>
+                            <th className="py-2 px-2.5 text-right text-rose-700 whitespace-nowrap">
+                              Susut (%)
+                            </th>
+                            <th className="py-2 px-3 text-center whitespace-nowrap">
+                              Status Deviasi
+                            </th>
+                            <th className="py-2 px-3 whitespace-nowrap">Quick Tag Lapangan</th>
+                            <th className="py-2 px-3 text-center whitespace-nowrap">
+                              Status Rekap
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 text-slate-700">
+                          {dhpItems.map((item) => {
+                            const evalItem = tacticalMap[item.id];
+                            const isOosRow = evalItem?.status === 'oos';
+                            return (
+                              <tr
+                                key={item.id}
+                                className={`group hover:bg-blue-50/40 transition-colors ${
+                                  isOosRow ? 'bg-rose-50/25' : 'bg-white'
+                                }`}
+                              >
+                                <td className="py-2 px-2.5 text-center font-mono text-[11px] text-slate-400">
+                                  {item.rowIdx}
+                                </td>
+                                <td className="py-2 px-3 font-medium text-slate-800 whitespace-nowrap">
+                                  <div>{item.tanggalDisplay}</div>
+                                  {item.waktu && (
+                                    <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
+                                      <Clock className="w-3 h-3" />
+                                      <span>{item.waktu}</span>
+                                    </div>
+                                  )}
+                                </td>
+                                <td
+                                  className={`py-2 px-3 font-semibold text-slate-900 sticky left-0 z-10 shadow-[1px_0_0_0_rgba(226,232,240,0.9)] transition-colors ${
+                                    isOosRow
+                                      ? 'bg-rose-50 group-hover:bg-blue-50'
+                                      : 'bg-white group-hover:bg-blue-50'
+                                  }`}
+                                >
+                                  <div className="whitespace-nowrap">{item.jenisTembakau}</div>
+                                  {item.kodeStock && (
+                                    <div className="text-[10px] text-slate-400 font-normal font-mono">
+                                      Stock: {item.kodeStock}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="py-2 px-2 text-center">
+                                  <span
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                      item.jalurProses === 'SKT'
+                                        ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                                        : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                    }`}
+                                  >
+                                    {item.jalurProses}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-2.5 text-right font-mono font-bold text-slate-900 tabular-nums">
+                                  {formatNum(item.baku)}
+                                </td>
+                                <td className="py-2 px-2.5 text-right font-mono font-medium text-slate-700 tabular-nums">
+                                  {item.hasil > 0 ? (
+                                    <span className="font-semibold text-emerald-800">
+                                      {formatNum(item.hasil)}
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-sans font-semibold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap"
+                                      title="Proses belum selesai atau menunggu data hasil"
+                                    >
+                                      0,0 (Proses)
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-2 px-2.5 text-right font-mono font-medium text-rose-700 tabular-nums">
+                                  {item.hasil > 0 ? formatNum(item.susutKg) : '-'}
+                                </td>
+                                <td className="py-2 px-2.5 text-right font-mono font-semibold text-slate-800 tabular-nums whitespace-nowrap">
+                                  <div>
+                                    {item.hasil > 0 ? `${formatPct(item.susutPct)}%` : '-'}
+                                  </div>
+                                  {evalItem && (
+                                    <div className="text-[10px] text-slate-400 font-normal">
+                                      Acuan {formatPct(evalItem.acuanPct)}%
+                                    </div>
+                                  )}
+                                </td>
+
+                                {/* KOLOM STATUS DEVIASI + TOOLTIP / SHEET DIAGNOSA KILAT */}
+                                <td className="py-2 px-3 text-center whitespace-nowrap">
+                                  {evalItem && (
+                                    <button
+                                      type="button"
+                                      onMouseEnter={(e) => {
+                                        if (!isDesktopHoverCapable()) return;
+                                        const r = e.currentTarget.getBoundingClientRect();
+                                        setDiagPopover({
+                                          item,
+                                          evalData: evalItem,
+                                          rect: {
+                                            top: r.top,
+                                            left: r.left + r.width / 2,
+                                            bottom: r.bottom
+                                          }
+                                        });
+                                      }}
+                                      onMouseLeave={() => {
+                                        if (!isDesktopHoverCapable()) return;
+                                        setDiagPopover(null);
+                                      }}
+                                      onClick={(e) => {
+                                        const r = e.currentTarget.getBoundingClientRect();
+                                        setDiagPopover((prev) =>
+                                          prev?.item.id === item.id
+                                            ? null
+                                            : {
+                                                item,
+                                                evalData: evalItem,
+                                                rect: {
+                                                  top: r.top,
+                                                  left: r.left + r.width / 2,
+                                                  bottom: r.bottom
+                                                }
+                                              }
+                                        );
+                                      }}
+                                      className={`min-h-[32px] lg:min-h-0 inline-flex flex-col items-center justify-center px-2 py-0.5 rounded-md border text-[10px] font-bold transition-colors cursor-pointer ${
+                                        evalItem.status === 'oos'
+                                          ? 'bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100'
+                                          : evalItem.status === 'waspada'
+                                          ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+                                          : evalItem.status === 'proses'
+                                          ? 'bg-slate-100 text-slate-600 border-slate-200'
+                                          : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                      }`}
+                                    >
+                                      <span className="inline-flex items-center gap-1">
+                                        {evalItem.status === 'oos' && (
+                                          <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
                                         )}
-                                      </button>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        onClick={() => openQuickTagEditor(item, evalItem)}
-                                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-semibold border transition-colors whitespace-nowrap cursor-pointer ${
-                                          evalItem.status === 'oos'
-                                            ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
-                                            : evalItem.status === 'waspada'
-                                            ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
-                                            : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200'
-                                        }`}
-                                      >
-                                        <Tag className="w-3 h-3 shrink-0" />
+                                        {evalItem.status === 'waspada' && (
+                                          <Info className="w-3 h-3 text-amber-600 shrink-0" />
+                                        )}
+                                        {evalItem.status === 'normal' && (
+                                          <Check className="w-3 h-3 text-emerald-600 shrink-0" />
+                                        )}
                                         <span>
                                           {evalItem.status === 'oos'
-                                            ? 'Tandai Alasan'
-                                            : '+ Quick Tag'}
+                                            ? 'OOS'
+                                            : evalItem.status === 'waspada'
+                                            ? 'Waspada'
+                                            : evalItem.status === 'proses'
+                                            ? 'Proses'
+                                            : 'Normal'}
                                         </span>
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-                              </td>
+                                      </span>
+                                      {evalItem.status !== 'proses' && (
+                                        <span className="font-mono text-[9.5px] font-semibold opacity-90 tabular-nums">
+                                          {evalItem.deviasiPct >= 0 ? '+' : ''}
+                                          {formatPct(evalItem.deviasiPct)}%
+                                        </span>
+                                      )}
+                                    </button>
+                                  )}
+                                </td>
 
-                              <td className="py-2 px-3 text-center whitespace-nowrap">
-                                {item.needsUpdateInRekap ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-300">
-                                    <AlertCircle className="w-3 h-3 text-amber-600" />
-                                    <span>Hasil Berubah (Rekap {formatNum(item.rekapHasil)} ➔ DHP {formatNum(item.hasil)})</span>
-                                  </span>
-                                ) : item.isMatchedInRekap ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                    <Check className="w-3 h-3 text-emerald-600" />
-                                    <span>Cocok (Brs {item.matchedRow})</span>
-                                  </span>
-                                ) : item.hasil <= 0 ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
-                                    <Clock className="w-3 h-3 text-slate-500" />
-                                    <span>Menunggu Hasil</span>
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                                    <Sparkles className="w-3 h-3 text-blue-600" />
-                                    <span>Siap Masuk Rekap</span>
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                    {dhpItems.length > 0 && (
-                      <tfoot className="sticky bottom-0 bg-slate-100/95 backdrop-blur-xs font-bold text-slate-800 border-t-2 border-slate-300 text-xs shadow-2xs z-10">
-                        <tr>
-                          <td colSpan={4} className="py-2.5 px-3 text-right uppercase text-[10px] tracking-wider text-slate-600">
-                            Total Neraca ({completedItems.length} Selesai / {dhpItems.length} Aktif):
-                          </td>
-                          <td className="py-2.5 px-2.5 text-right font-mono text-slate-900 font-bold">
-                            {formatNum(totalBaku)}
-                          </td>
-                          <td className="py-2.5 px-2.5 text-right font-mono text-emerald-800 font-bold">
-                            {formatNum(totalHasil)}
-                          </td>
-                          <td className="py-2.5 px-2.5 text-right font-mono text-rose-700 font-bold">
-                            {completedItems.length > 0 ? formatNum(totalSusutKg) : '-'}
-                          </td>
-                          <td className="py-2.5 px-2.5 text-right font-mono text-slate-900 font-bold">
-                            {completedItems.length > 0 ? `${formatPct(overallSusutPct)}%` : '-'}
-                          </td>
-                          <td className="py-2.5 px-3 text-center text-[10px] font-mono text-slate-700">
-                            {oosBatchCount > 0
-                              ? `${oosBatchCount} OOS`
-                              : inProgressCount === dhpItems.length
-                              ? `${inProgressCount} Proses`
-                              : 'Terkendali'}
-                          </td>
-                          <td className="py-2.5 px-3 text-[10px] text-slate-600">
-                            {evalValues.filter((e) => e.tags.length > 0).length} Bertag
-                          </td>
-                          <td className="py-2.5 px-3 text-center text-[10px] text-emerald-700 font-semibold">
-                            {matchedCount}/{dhpItems.length} Terverifikasi
-                          </td>
-                        </tr>
-                      </tfoot>
-                    )}
-                  </table>
-                </div>
+                                {/* KOLOM QUICK TAG LAPANGAN (MANDOR) */}
+                                <td className="py-2 px-3">
+                                  {evalItem && (
+                                    <div className="flex flex-col items-start gap-1">
+                                      {evalItem.tags.length > 0 ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => openQuickTagEditor(item, evalItem)}
+                                          className="text-left group/tag cursor-pointer"
+                                          title="Klik untuk mengubah alasan lapangan"
+                                        >
+                                          <div className="text-[10.5px] font-semibold text-blue-700 group-hover/tag:underline leading-tight whitespace-nowrap">
+                                            {evalItem.tags[0]}
+                                            {evalItem.tags.length > 1 && (
+                                              <span className="text-slate-500 font-normal">
+                                                {' '}
+                                                +{evalItem.tags.length - 1}
+                                              </span>
+                                            )}
+                                          </div>
+                                          {evalItem.catatan && (
+                                            <div className="text-[10px] text-slate-500 truncate max-w-[140px]">
+                                              &ldquo;{evalItem.catatan}&rdquo;
+                                            </div>
+                                          )}
+                                        </button>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() => openQuickTagEditor(item, evalItem)}
+                                          className={`min-h-[30px] lg:min-h-0 inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-semibold border transition-colors whitespace-nowrap cursor-pointer ${
+                                            evalItem.status === 'oos'
+                                              ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
+                                              : evalItem.status === 'waspada'
+                                              ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
+                                              : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200'
+                                          }`}
+                                        >
+                                          <Tag className="w-3 h-3 shrink-0" />
+                                          <span>
+                                            {evalItem.status === 'oos'
+                                              ? 'Tandai Alasan'
+                                              : '+ Quick Tag'}
+                                          </span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  )}
+                                </td>
+
+                                <td className="py-2 px-3 text-center whitespace-nowrap">
+                                  {item.needsUpdateInRekap ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-300">
+                                      <AlertCircle className="w-3 h-3 text-amber-600" />
+                                      <span>
+                                        Hasil Berubah (Rekap {formatNum(item.rekapHasil)} → DHP{' '}
+                                        {formatNum(item.hasil)})
+                                      </span>
+                                    </span>
+                                  ) : item.isMatchedInRekap ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                      <Check className="w-3 h-3 text-emerald-600" />
+                                      <span>Cocok (Brs {item.matchedRow})</span>
+                                    </span>
+                                  ) : item.hasil <= 0 ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                      <Clock className="w-3 h-3 text-slate-500" />
+                                      <span>Menunggu Hasil</span>
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                      <Sparkles className="w-3 h-3 text-blue-600" />
+                                      <span>Siap Masuk Rekap</span>
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot className="sticky bottom-0 bg-slate-100/95 backdrop-blur-xs font-bold text-slate-800 border-t-2 border-slate-300 text-xs shadow-2xs z-20">
+                          <tr>
+                            <td
+                              colSpan={4}
+                              className="py-2.5 px-3 text-right uppercase text-[10px] tracking-wider text-slate-600"
+                            >
+                              Total Neraca ({completedItems.length} Selesai / {dhpItems.length}{' '}
+                              Aktif):
+                            </td>
+                            <td className="py-2.5 px-2.5 text-right font-mono text-slate-900 font-bold tabular-nums">
+                              {formatNum(totalBaku)}
+                            </td>
+                            <td className="py-2.5 px-2.5 text-right font-mono text-emerald-800 font-bold tabular-nums">
+                              {formatNum(totalHasil)}
+                            </td>
+                            <td className="py-2.5 px-2.5 text-right font-mono text-rose-700 font-bold tabular-nums">
+                              {completedItems.length > 0 ? formatNum(totalSusutKg) : '-'}
+                            </td>
+                            <td className="py-2.5 px-2.5 text-right font-mono text-slate-900 font-bold tabular-nums">
+                              {completedItems.length > 0
+                                ? `${formatPct(overallSusutPct)}%`
+                                : '-'}
+                            </td>
+                            <td className="py-2.5 px-3 text-center text-[10px] font-mono text-slate-700">
+                              {oosBatchCount > 0
+                                ? `${oosBatchCount} OOS`
+                                : inProgressCount === dhpItems.length
+                                ? `${inProgressCount} Proses`
+                                : 'Terkendali'}
+                            </td>
+                            <td className="py-2.5 px-3 text-[10px] text-slate-600">
+                              {evalValues.filter((e) => e.tags.length > 0).length} Bertag
+                            </td>
+                            <td className="py-2.5 px-3 text-center text-[10px] text-emerald-700 font-semibold">
+                              {matchedCount}/{dhpItems.length} Terverifikasi
+                            </td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </>
+                )}
               </div>
 
-              {/* Compact Bottom Action Bar */}
-              <div className="px-3.5 py-2 bg-gradient-to-r from-blue-50/70 to-indigo-50/70 rounded-lg border border-blue-200/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 text-xs">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
-                    <span className="text-slate-700 font-medium text-[11px]">
-                      {needUpdateCount > 0
-                        ? `Terdapat ${needUpdateCount} batch selesai yang perlu diselaraskan ke Rekap${newCount > 0 ? ` dan ${newCount} batch baru` : ''}.`
-                        : newCount > 0
-                        ? `Terdapat ${newCount} batch selesai yang siap dibukukan ke baris baru Sheet Rekap.`
-                        : inProgressCount > 0
-                        ? `${inProgressCount} batch aktif sedang dalam proses pengolahan (menunggu input Netto Hasil di Sheet DHP).`
-                        : `Semua ${dhpItems.length} baris data DHP sudah tersinkronisasi presisi di Sheet Rekap.`}
-                    </span>
-                  </div>
-                  {untaggedOosCount > 0 && (
-                    <span className="text-[11px] font-semibold text-rose-700">
-                      · Perhatian: {untaggedOosCount} batch OOS belum diberi Quick Tag Mandor
-                    </span>
-                  )}
-                </div>
-
-                <button
-                  onClick={handleSyncToRekap}
-                  disabled={syncingToRekap}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs transition-colors disabled:opacity-50 shrink-0 cursor-pointer"
-                >
-                  <Send className={`w-3.5 h-3.5 ${syncingToRekap ? 'animate-spin' : ''}`} />
-                  <span>
-                    {syncingToRekap
-                      ? 'Sedang Membukukan...'
-                      : needUpdateCount > 0
-                      ? `Sinkronkan & Selaraskan (${needUpdateCount} Update)`
-                      : 'Sinkronkan ke Sheet Rekap'}
-                  </span>
-                </button>
-              </div>
-
-              {/* FLOATING TOOLTIP DIAGNOSA KILAT (Hover / Tap Escape-Clip Safe) */}
+              {/* DESKTOP FLOATING TOOLTIP DIAGNOSA KILAT (>= 1024px Hover-Safe) */}
               {diagPopover && (
                 <div
-                  className="fixed z-[75] w-80 p-3.5 rounded-xl bg-slate-900 text-white shadow-2xl border border-slate-700 text-xs pointer-events-none"
+                  className="hidden lg:block fixed z-[75] w-80 p-3.5 rounded-xl bg-slate-900 text-white shadow-2xl border border-slate-700 text-xs pointer-events-none"
                   style={{
                     top:
                       diagPopover.rect.top > 260
@@ -1252,7 +1582,7 @@ function perbaikiHasilNolDiRekap() {
                     </p>
                   ) : (
                     <div className="space-y-2 text-[11px]">
-                      <div className="grid grid-cols-3 gap-1.5 bg-slate-800/90 p-2 rounded-lg font-mono text-center">
+                      <div className="grid grid-cols-3 gap-1.5 bg-slate-800/90 p-2 rounded-lg font-mono text-center tabular-nums">
                         <div>
                           <div className="text-[9.5px] text-slate-400 font-sans">Riil</div>
                           <div className="font-bold text-white">
@@ -1282,7 +1612,7 @@ function perbaikiHasilNolDiRekap() {
                         </div>
                       </div>
 
-                      <div className="space-y-1">
+                      <div className="space-y-1 tabular-nums">
                         <div className="text-[10px] font-semibold text-slate-400">
                           Dekomposisi Limbah &amp; Neraca Massa:
                         </div>
@@ -1311,8 +1641,10 @@ function perbaikiHasilNolDiRekap() {
                       </div>
 
                       {diagPopover.evalData.weatherAtBatch && (
-                        <div className="pt-1.5 border-t border-slate-800 flex items-center justify-between text-[10.5px] text-slate-300">
-                          <span>Cuaca Jam Proses ({diagPopover.item.waktu || 'Pabrik'}):</span>
+                        <div className="pt-1.5 border-t border-slate-800 flex items-center justify-between text-[10.5px] text-slate-300 tabular-nums">
+                          <span>
+                            Cuaca Jam Proses ({diagPopover.item.waktu || 'Pabrik'}):
+                          </span>
                           <span className="font-mono text-amber-300">
                             {diagPopover.evalData.weatherAtBatch.temperature.toFixed(1)}°C · RH{' '}
                             {Math.round(diagPopover.evalData.weatherAtBatch.humidity)}%
@@ -1328,6 +1660,159 @@ function perbaikiHasilNolDiRekap() {
                       </div>
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* MOBILE & TABLET BOTTOM-SHEET / MODAL DIAGNOSA KILAT (< 1024px Touch-Friendly) */}
+              {diagPopover && (
+                <div
+                  className="lg:hidden fixed inset-0 z-[78] flex items-end sm:items-center justify-center p-2.5 sm:p-4 bg-slate-950/60 backdrop-blur-xs"
+                  onClick={() => setDiagPopover(null)}
+                >
+                  <div
+                    className="w-full max-w-md rounded-2xl bg-slate-900 text-white shadow-2xl border border-slate-700 p-4 space-y-3 text-xs"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-start justify-between gap-2 border-b border-slate-800 pb-2.5">
+                      <div className="min-w-0">
+                        <div className="text-[10.5px] font-semibold text-sky-400">
+                          Diagnosa Kilat Neraca &amp; Deviasi
+                        </div>
+                        <div className="font-bold text-sm text-white mt-0.5 flex items-center gap-2 flex-wrap">
+                          <span>{diagPopover.item.jenisTembakau}</span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase ${
+                              diagPopover.evalData.status === 'oos'
+                                ? 'bg-rose-600 text-white'
+                                : diagPopover.evalData.status === 'waspada'
+                                ? 'bg-amber-500 text-slate-950'
+                                : 'bg-emerald-600 text-white'
+                            }`}
+                          >
+                            {diagPopover.evalData.status}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 font-mono mt-0.5">
+                          {diagPopover.item.tanggalDisplay}
+                          {diagPopover.item.waktu ? ` · ${diagPopover.item.waktu}` : ''} · Baku{' '}
+                          {formatNum(diagPopover.item.baku)} Kg
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setDiagPopover(null)}
+                        aria-label="Tutup diagnosa"
+                        className="min-h-[36px] min-w-[36px] inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer shrink-0"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {diagPopover.evalData.status === 'proses' ? (
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        {diagPopover.evalData.penjelasanKilat}
+                      </p>
+                    ) : (
+                      <div className="space-y-2.5 text-xs">
+                        <div className="grid grid-cols-3 gap-2 bg-slate-800/90 p-2.5 rounded-xl font-mono text-center tabular-nums">
+                          <div>
+                            <div className="text-[10px] text-slate-400 font-sans">Susut Riil</div>
+                            <div className="font-bold text-white text-sm mt-0.5">
+                              {formatPct(diagPopover.item.susutPct)}%
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-slate-400 font-sans">Acuan</div>
+                            <div className="font-bold text-emerald-300 text-sm mt-0.5">
+                              {formatPct(diagPopover.evalData.acuanPct)}%
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-slate-400 font-sans">Deviasi</div>
+                            <div
+                              className={`font-bold text-sm mt-0.5 ${
+                                diagPopover.evalData.status === 'oos'
+                                  ? 'text-rose-400'
+                                  : diagPopover.evalData.status === 'waspada'
+                                  ? 'text-amber-300'
+                                  : 'text-emerald-300'
+                              }`}
+                            >
+                              {diagPopover.evalData.deviasiPct >= 0 ? '+' : ''}
+                              {formatPct(diagPopover.evalData.deviasiPct)}%
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5 tabular-nums bg-slate-800/50 rounded-xl p-2.5 border border-slate-800">
+                          <div className="text-[10.5px] font-semibold text-slate-400">
+                            Dekomposisi Limbah &amp; Neraca Massa:
+                          </div>
+                          <div className="flex justify-between font-mono text-[11px]">
+                            <span className="text-slate-300">Kadar Air / Uap:</span>
+                            <span className="text-sky-300 font-semibold">
+                              {diagPopover.evalData.uapAirKg >= 0 ? '+' : ''}
+                              {formatNum(diagPopover.evalData.uapAirKg)} Kg (
+                              {formatPct(diagPopover.evalData.uapAirPct)}%)
+                            </span>
+                          </div>
+                          <div className="flex justify-between font-mono text-[11px]">
+                            <span className="text-slate-300">Fraksi Gagang:</span>
+                            <span>
+                              {formatNum(diagPopover.evalData.gagangKg)} Kg (
+                              {formatPct(diagPopover.evalData.gagangPct)}%)
+                            </span>
+                          </div>
+                          <div className="flex justify-between font-mono text-[11px]">
+                            <span className="text-slate-300">Fraksi Debu:</span>
+                            <span>
+                              {formatNum(diagPopover.evalData.debuKg)} Kg (
+                              {formatPct(diagPopover.evalData.debuPct)}%)
+                            </span>
+                          </div>
+                        </div>
+
+                        {diagPopover.evalData.weatherAtBatch && (
+                          <div className="flex items-center justify-between text-[11px] text-slate-300 tabular-nums px-1">
+                            <span>
+                              Cuaca Jam Proses ({diagPopover.item.waktu || 'Pabrik'}):
+                            </span>
+                            <span className="font-mono text-amber-300">
+                              {diagPopover.evalData.weatherAtBatch.temperature.toFixed(1)}°C · RH{' '}
+                              {Math.round(diagPopover.evalData.weatherAtBatch.humidity)}%
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="p-2.5 rounded-xl bg-slate-800/70 border border-slate-700/80 text-[11px] text-slate-200 leading-relaxed">
+                          <strong className="text-sky-300">
+                            {diagPopover.evalData.diagnosaUtama}:
+                          </strong>{' '}
+                          {diagPopover.evalData.penjelasanKilat}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openQuickTagEditor(diagPopover.item, diagPopover.evalData)
+                        }
+                        className="min-h-[38px] px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white inline-flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Tag className="w-3.5 h-3.5" />
+                        <span>Isi Quick Tag Mandor</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDiagPopover(null)}
+                        className="min-h-[38px] px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 cursor-pointer"
+                      >
+                        Tutup
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1443,14 +1928,14 @@ function perbaikiHasilNolDiRekap() {
                 </p>
               </div>
 
-              <div className="border border-slate-200 rounded-xl overflow-hidden">
-                <table className="w-full text-xs text-left">
+              <div className="border border-slate-200 rounded-xl overflow-x-auto">
+                <table className="w-full min-w-[560px] text-xs text-left">
                   <thead>
                     <tr className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 uppercase text-[10px]">
                       <th className="py-2.5 px-3">Kolom Asal (DHP Krosok)</th>
                       <th className="py-2.5 px-3 text-center">Arah</th>
                       <th className="py-2.5 px-3">Kolom Target (REKAP SUSUT)</th>
-                      <th className="py-2.5 px-3">Tipe Data & Validasi</th>
+                      <th className="py-2.5 px-3">Tipe Data &amp; Validasi</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -1498,7 +1983,7 @@ function perbaikiHasilNolDiRekap() {
                         <Check className="w-3.5 h-3.5 mx-auto" />
                       </td>
                       <td className="py-2.5 px-3 font-semibold text-emerald-800">
-                        Kolom E: =iferror(JOIN(" ";F...;G...))
+                        Kolom E: =iferror(JOIN(&quot; &quot;;F...;G...))
                       </td>
                       <td className="py-2.5 px-3 text-emerald-700 font-medium">Rumus disalin otomatis dari baris atas (tidak tertimpa nilai statis)</td>
                     </tr>
@@ -1571,7 +2056,7 @@ function perbaikiHasilNolDiRekap() {
           {/* TAB 3: APPS SCRIPT CODE */}
           {activeTab === 'script' && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <h4 className="text-xs font-bold text-slate-800">
                     Skrip Google Apps Script untuk Otomasi di Google Sheets
@@ -1582,7 +2067,7 @@ function perbaikiHasilNolDiRekap() {
                 </div>
                 <button
                   onClick={copyScriptToClipboard}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white shadow-2xs transition-colors"
+                  className="min-h-[38px] sm:min-h-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white shadow-2xs transition-colors cursor-pointer"
                 >
                   {copiedScript ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                   <span>{copiedScript ? 'Tersalin ke Clipboard!' : 'Salin Skrip'}</span>
@@ -1596,18 +2081,69 @@ function perbaikiHasilNolDiRekap() {
           )}
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
-          <span className="text-xs text-slate-500 flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            <span>Koneksi aman &amp; pemetaan kolom terverifikasi</span>
-          </span>
-          <button
-            onClick={onClose}
-            className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors"
-          >
-            Tutup
-          </button>
+        {/* Sticky / Pinned Action Footer — Always Visible Without Scrolling */}
+        <div className="px-3.5 sm:px-5 py-2.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shrink-0">
+          {activeTab === 'preview' ? (
+            <>
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-700 min-w-0">
+                <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 hidden sm:inline" />
+                <span className="font-medium leading-snug">
+                  {needUpdateCount > 0
+                    ? `${needUpdateCount} batch selesai perlu diselaraskan ke Rekap${
+                        newCount > 0 ? ` (+${newCount} baru)` : ''
+                      }.`
+                    : newCount > 0
+                    ? `${newCount} batch selesai siap dibukukan ke Sheet Rekap.`
+                    : inProgressCount > 0
+                    ? `${inProgressCount} batch aktif sedang diproses (menunggu Netto Hasil).`
+                    : dhpItems.length === 0
+                    ? 'Siaga memantau input batch baru pada Sheet DHP Krosok.'
+                    : `Semua ${dhpItems.length} batch aktif sudah tersinkronisasi di Sheet Rekap.`}
+                </span>
+                {untaggedOosCount > 0 && (
+                  <span className="font-semibold text-rose-700">
+                    · {untaggedOosCount} OOS belum bertag
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
+                <button
+                  onClick={handleSyncToRekap}
+                  disabled={syncingToRekap}
+                  className="min-h-[40px] sm:min-h-[36px] flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-2xs transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  <Send className={`w-3.5 h-3.5 shrink-0 ${syncingToRekap ? 'animate-spin' : ''}`} />
+                  <span>
+                    {syncingToRekap
+                      ? 'Sedang Membukukan...'
+                      : needUpdateCount > 0
+                      ? `Sinkronkan (${needUpdateCount} Update)`
+                      : 'Sinkronkan ke Sheet Rekap'}
+                  </span>
+                </button>
+                <button
+                  onClick={onClose}
+                  className="min-h-[40px] sm:min-h-[36px] px-4 py-2 sm:py-1.5 rounded-lg text-xs font-semibold bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors cursor-pointer shrink-0"
+                >
+                  Tutup
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <span className="text-[11px] sm:text-xs text-slate-500 flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Koneksi aman &amp; pemetaan kolom terverifikasi</span>
+              </span>
+              <button
+                onClick={onClose}
+                className="min-h-[38px] sm:min-h-0 px-4 py-1.5 rounded-lg text-xs font-semibold bg-slate-200 hover:bg-slate-300 text-slate-700 transition-colors cursor-pointer self-end sm:self-auto"
+              >
+                Tutup
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

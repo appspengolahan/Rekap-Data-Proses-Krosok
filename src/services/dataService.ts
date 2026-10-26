@@ -33,6 +33,7 @@ const STORAGE_KEYS = {
   SIDEBAR_COLLAPSED: 'krosok_sidebar_collapsed_v1',
   USER_ROLE: 'krosok_user_role_v1',
   DHP_CACHE: 'krosok_dhp_cache_v1',
+  DHP_ACTIVE_DATE: 'krosok_dhp_active_sheet_date_v1',
 };
 
 export function loadConfig(): GASConfig {
@@ -535,6 +536,19 @@ export async function fetchDhpKrosokRecords(
     const rows = json.table?.rows || [];
     const items: DhpKrosokItem[] = [];
 
+    // Extract active operational sheet date from top header rows (e.g. Row 0 Col C: "Senin, 26 Oktober 2026")
+    let detectedSheetDateLabel = '';
+    for (let i = 0; i < Math.min(rows.length, 4); i++) {
+      const cellDate = rows[i]?.c?.[2];
+      if (!cellDate) continue;
+      const rawVal = cellDate.v;
+      const formattedVal = typeof cellDate.f === 'string' ? cellDate.f.trim() : '';
+      if (typeof rawVal === 'string' && rawVal.startsWith('Date(')) {
+        detectedSheetDateLabel = formattedVal || parseGvizDate(rawVal).display;
+        break;
+      }
+    }
+
     // First pass: Build independent master Stock Code lookup from Columns Q & R (indices 16 & 17)
     // Note: Columns Q & R in INTEGRASI DATA are an alphabetical master lookup table, NOT aligned by row index!
     const stockCodeByVariant = new Map<string, { kodeStock?: string; masterName: string }>();
@@ -671,12 +685,35 @@ export async function fetchDhpKrosokRecords(
       }
     }
 
+    if (!detectedSheetDateLabel && items.length > 0) {
+      detectedSheetDateLabel = items[0].tanggalDisplay;
+    }
+    if (detectedSheetDateLabel) {
+      setDhpActiveSheetDateLabel(detectedSheetDateLabel);
+    }
+
     // Always store and return the exact live state of Sheet DHP Krosok (even if 0 active batches)
     setCachedDhpItems(items);
     return items;
   } catch (err) {
     console.warn('fetchDhpKrosokRecords network notice (using cached):', err);
     return getCachedDhpItems();
+  }
+}
+
+export function getDhpActiveSheetDateLabel(): string {
+  try {
+    return localStorage.getItem(STORAGE_KEYS.DHP_ACTIVE_DATE) || '';
+  } catch {
+    return '';
+  }
+}
+
+function setDhpActiveSheetDateLabel(label: string): void {
+  try {
+    localStorage.setItem(STORAGE_KEYS.DHP_ACTIVE_DATE, label);
+  } catch {
+    // ignore storage quota errors
   }
 }
 
