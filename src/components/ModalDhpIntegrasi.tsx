@@ -42,6 +42,7 @@ import {
   TacticalBatchEvaluation
 } from '../types';
 import {
+  fetchDhpKrosokRecords,
   fetchRekapActiveDateAudit,
   formatNum,
   formatPct,
@@ -269,7 +270,12 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
     setSyncSuccessMsg(null);
     try {
       await onRefreshDhp();
-      const freshAudit = await fetchRekapActiveDateAudit(config, dhpItems);
+      const latestDhp = await fetchDhpKrosokRecords(
+        config.dhpSpreadsheetId,
+        config.dhpSheetName,
+        rekapRecords
+      );
+      const freshAudit = await fetchRekapActiveDateAudit(config, latestDhp);
       setRealizationAudit(freshAudit);
       setCountdown(12);
     } finally {
@@ -289,38 +295,57 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
     const beforeCount = realizationAudit?.purgeableRows.length || 0;
 
     try {
+      let gasSummaryResult: {
+        purgedCancelledCount?: number;
+        purgedTemplateCount?: number;
+        protectedCount?: number;
+        summary?: string;
+      } | null = null;
+
       if (config.gasUrl && config.gasUrl.startsWith('http')) {
         try {
-          await fetch(config.gasUrl, {
+          const postRes = await fetch(config.gasUrl, {
             method: 'POST',
-            mode: 'no-cors',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify({
               action: 'reconcileActiveDate',
               activeIsoDate
-            })
+            }),
+            redirect: 'follow'
           });
+          if (postRes.ok) {
+            const postJson = await postRes.json();
+            if (postJson && postJson.result) {
+              gasSummaryResult = postJson.result;
+            }
+          }
         } catch (e) {
           console.warn('Network notice during GAS reconciliation post:', e);
         }
       }
 
-      // Give Google Sheets script execution ~1.4s to finish bottom-up row deletion before re-auditing
-      await new Promise((resolve) => setTimeout(resolve, 1400));
-
       await onRefreshDhp();
       if (onTriggerFullSync) {
         await onTriggerFullSync();
       }
-      const freshAudit = await fetchRekapActiveDateAudit(config, dhpItems);
+      const latestDhp = await fetchDhpKrosokRecords(
+        config.dhpSpreadsheetId,
+        config.dhpSheetName,
+        rekapRecords
+      );
+      const freshAudit = await fetchRekapActiveDateAudit(config, latestDhp);
       setRealizationAudit(freshAudit);
 
       const afterCount = freshAudit?.purgeableRows.length || 0;
+      const gasPurgedTotal =
+        (gasSummaryResult?.purgedCancelledCount || 0) +
+        (gasSummaryResult?.purgedTemplateCount || 0);
 
-      if (beforeCount > 0 && afterCount === 0) {
+      if (gasPurgedTotal > 0 || (beforeCount > 0 && afterCount === 0)) {
+        const cleanedCount = gasPurgedTotal > 0 ? gasPurgedTotal : beforeCount;
         setSyncFeedbackTone('emerald');
         setSyncSuccessMsg(
-          `Rekonsiliasi Berhasil: ${beforeCount} baris rencana batal/kosong (Netto Hasil = 0 Kg) pada tanggal aktif telah dibersihkan dari Sheet Rekap. Rumus Kolom C, D, E, J, K aman 100%.`
+          `Rekonsiliasi Berhasil: ${cleanedCount} baris rencana batal/kosong (Netto Hasil = 0 Kg) pada tanggal aktif telah dibersihkan dari Sheet Rekap. Rumus Kolom C, D, E, J, K aman 100%.`
         );
       } else if (beforeCount > 0 && afterCount < beforeCount) {
         setSyncFeedbackTone('emerald');
@@ -332,16 +357,16 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
       } else if (beforeCount > 0 && afterCount >= beforeCount) {
         setSyncFeedbackTone('amber');
         setSyncSuccessMsg(
-          `Perintah pembersihan ${beforeCount} baris batal dikirim ke GAS. Baris masih terdeteksi di Sheet — pastikan kode terbaru pada menu ⚙️ → Skrip Otomasi GAS (IntegrasiDHP.gs) sudah disalin & di-deploy ulang di Google Sheets.`
+          `Perintah pembersihan ${beforeCount} baris batal dikirim ke GAS. Baris masih terdeteksi di Sheet — periksa koneksi atau versi deploy GAS.`
         );
       } else {
         setSyncFeedbackTone('emerald');
         setSyncSuccessMsg(
-          `Audit Realisasi Bersih (${
+          `Audit Realisasi Terverifikasi Live (${
             freshAudit?.activeDateDisplay || activeSheetDateLabel || 'Tanggal Aktif'
-          }): 0 baris rencana batal/kosong (Hasil 0 Kg) di Sheet Rekap. Data selaras dengan ${
-            dhpItems.length
-          } varian aktif DHP.`
+          }): 0 baris rencana batal/kosong (Hasil 0 Kg) di Sheet Rekap. Selaras dengan ${
+            latestDhp.length
+          } varian aktif DHP & Rumus C, D, E, J, K aman 100%.`
         );
       }
     } catch (err) {
@@ -408,18 +433,25 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
       });
 
       // Send to GAS (runs two-way sync: Bottom-Up Auto-Purge + Upsert Completed DHP + Formula Protection)
+      let gasSyncSummary: string | null = null;
       if (config.gasUrl && config.gasUrl.startsWith('http')) {
         try {
-          await fetch(config.gasUrl, {
+          const postRes = await fetch(config.gasUrl, {
             method: 'POST',
-            mode: 'no-cors',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify({
               action: 'appendDhpRecords',
               activeIsoDate,
               records: convertedRecords
-            })
+            }),
+            redirect: 'follow'
           });
+          if (postRes.ok) {
+            const postJson = await postRes.json();
+            if (postJson?.result?.summary) {
+              gasSyncSummary = postJson.result.summary;
+            }
+          }
         } catch (e) {
           console.warn('Network notice during GAS post:', e);
         }
@@ -429,12 +461,19 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
         onAppendRecordsToRekap(convertedRecords);
       }
 
-      const freshAudit = await fetchRekapActiveDateAudit(config, dhpItems);
+      const latestDhp = await fetchDhpKrosokRecords(
+        config.dhpSpreadsheetId,
+        config.dhpSheetName,
+        rekapRecords
+      );
+      const freshAudit = await fetchRekapActiveDateAudit(config, latestDhp);
       setRealizationAudit(freshAudit);
 
       setSyncFeedbackTone('emerald');
       setSyncSuccessMsg(
-        `Berhasil menyinkronkan ${convertedRecords.length} batch selesai dari DHP Krosok ke Sheet Rekap Susut Krosok (+ rekonsiliasi otomatis tanggal aktif)!`
+        gasSyncSummary
+          ? `Sinkronisasi 2 Arah Berhasil — ${gasSyncSummary}`
+          : `Berhasil menyinkronkan ${convertedRecords.length} batch selesai dari DHP Krosok ke Sheet Rekap Susut Krosok (+ rekonsiliasi otomatis tanggal aktif)!`
       );
     } catch (err: any) {
       setSyncFeedbackTone('emerald');
@@ -1257,7 +1296,7 @@ function doPost(e) {
 
         {/* Modal Body */}
         <div
-          className="flex-1 overflow-y-auto px-3 sm:px-4 lg:px-5 py-1.5 sm:py-2 space-y-1.5 min-h-0"
+          className="flex-1 overflow-y-auto px-2.5 sm:px-3.5 lg:px-4 py-1.5 sm:py-2 space-y-1.5 min-h-0"
           onScroll={() => {
             if (diagPopover && isDesktopHoverCapable()) {
               setDiagPopover(null);
@@ -1849,28 +1888,29 @@ function doPost(e) {
                         <thead className="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200 uppercase text-[10px] tracking-wider">
                           <tr>
                             <th className="py-1.5 px-1.5 text-center w-9">Row</th>
-                            <th className="py-1.5 px-2 whitespace-nowrap">Tanggal &amp; Waktu</th>
-                            <th className="py-1.5 px-2 sticky left-0 lg:static z-20 bg-slate-100 shadow-[1px_0_0_0_rgba(203,213,225,0.8)] lg:shadow-none">
+                            <th className="py-1.5 px-1.5 lg:px-2 whitespace-nowrap">
+                              Tanggal &amp; Waktu
+                            </th>
+                            <th className="py-1.5 px-1.5 lg:px-2 sticky left-0 lg:static z-20 bg-slate-100 shadow-[1px_0_0_0_rgba(203,213,225,0.8)] lg:shadow-none">
                               Jenis Krosok
                             </th>
-                            <th className="py-1.5 px-1.5 text-center w-12">Jalur</th>
-                            <th className="py-1.5 px-2 text-right whitespace-nowrap">
+                            <th className="py-1.5 px-1 text-center w-11">Jalur</th>
+                            <th className="py-1.5 px-1.5 lg:px-2 text-right whitespace-nowrap">
                               Baku (Kg)
                             </th>
-                            <th className="py-1.5 px-2 text-right whitespace-nowrap">
+                            <th className="py-1.5 px-1.5 lg:px-2 text-right whitespace-nowrap">
                               Hasil (Kg)
                             </th>
-                            <th className="py-1.5 px-2 text-right text-rose-700 whitespace-nowrap">
+                            <th className="py-1.5 px-1.5 lg:px-2 text-right text-rose-700 whitespace-nowrap">
                               Susut (Kg)
                             </th>
-                            <th className="py-1.5 px-2 text-right text-rose-700 whitespace-nowrap">
+                            <th className="py-1.5 px-1.5 lg:px-2 text-right text-rose-700 whitespace-nowrap">
                               Susut (%)
                             </th>
-                            <th className="py-1.5 px-2 text-center whitespace-nowrap">
+                            <th className="py-1.5 px-1.5 lg:px-2 text-center whitespace-nowrap">
                               Status Deviasi
                             </th>
-                            <th className="py-1.5 px-2 whitespace-nowrap">Quick Tag Lapangan</th>
-                            <th className="py-1.5 px-2 text-center whitespace-nowrap">
+                            <th className="py-1.5 px-1.5 lg:px-2 text-center whitespace-nowrap">
                               Status Rekap
                             </th>
                           </tr>
@@ -1890,7 +1930,7 @@ function doPost(e) {
                                 <td className="py-1.5 px-1.5 text-center font-mono text-[11px] text-slate-400 tabular-nums">
                                   {item.rowIdx}
                                 </td>
-                                <td className="py-1.5 px-2 font-medium text-slate-800 whitespace-nowrap leading-tight">
+                                <td className="py-1.5 px-1.5 lg:px-2 font-medium text-slate-800 whitespace-nowrap leading-tight">
                                   <div>{item.tanggalDisplay}</div>
                                   {hasRealTime && (
                                     <div className="text-[10px] text-slate-400 font-mono inline-flex items-center gap-1 mt-0.5 tabular-nums leading-tight">
@@ -1900,20 +1940,25 @@ function doPost(e) {
                                   )}
                                 </td>
                                 <td
-                                  className={`py-1.5 px-2 font-semibold text-slate-900 sticky left-0 lg:static z-10 shadow-[1px_0_0_0_rgba(226,232,240,0.9)] lg:shadow-none transition-colors leading-tight ${
+                                  className={`py-1.5 px-1.5 lg:px-2 font-semibold text-slate-900 sticky left-0 lg:static z-10 shadow-[1px_0_0_0_rgba(226,232,240,0.9)] lg:shadow-none transition-colors leading-tight ${
                                     isOosRow
                                       ? 'bg-rose-50 group-hover:bg-blue-50'
                                       : 'bg-white group-hover:bg-blue-50'
                                   }`}
                                 >
-                                  <div className="whitespace-nowrap">{item.jenisTembakau}</div>
+                                  <div
+                                    className="max-w-[185px] xl:max-w-none truncate xl:whitespace-nowrap"
+                                    title={item.jenisTembakau}
+                                  >
+                                    {item.jenisTembakau}
+                                  </div>
                                   {item.kodeStock && (
                                     <div className="text-[10px] text-slate-400 font-normal font-mono whitespace-nowrap mt-0.5 leading-tight">
                                       Stock: {item.kodeStock}
                                     </div>
                                   )}
                                 </td>
-                                <td className="py-1.5 px-1.5 text-center">
+                                <td className="py-1.5 px-1 text-center">
                                   <span
                                     className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
                                       item.jalurProses === 'SKT'
@@ -1924,10 +1969,10 @@ function doPost(e) {
                                     {item.jalurProses}
                                   </span>
                                 </td>
-                                <td className="py-1.5 px-2 text-right font-mono font-bold text-slate-900 tabular-nums whitespace-nowrap">
+                                <td className="py-1.5 px-1.5 lg:px-2 text-right font-mono font-bold text-slate-900 tabular-nums whitespace-nowrap">
                                   {formatNum(item.baku)}
                                 </td>
-                                <td className="py-1.5 px-2 text-right font-mono font-medium text-slate-700 tabular-nums whitespace-nowrap">
+                                <td className="py-1.5 px-1.5 lg:px-2 text-right font-mono font-medium text-slate-700 tabular-nums whitespace-nowrap">
                                   {item.hasil > 0 ? (
                                     <span className="font-semibold text-emerald-800">
                                       {formatNum(item.hasil)}
@@ -1941,10 +1986,10 @@ function doPost(e) {
                                     </span>
                                   )}
                                 </td>
-                                <td className="py-1.5 px-2 text-right font-mono font-medium text-rose-700 tabular-nums whitespace-nowrap">
+                                <td className="py-1.5 px-1.5 lg:px-2 text-right font-mono font-medium text-rose-700 tabular-nums whitespace-nowrap">
                                   {item.hasil > 0 ? formatNum(item.susutKg) : '-'}
                                 </td>
-                                <td className="py-1.5 px-2 text-right font-mono font-semibold text-slate-800 tabular-nums whitespace-nowrap leading-tight">
+                                <td className="py-1.5 px-1.5 lg:px-2 text-right font-mono font-semibold text-slate-800 tabular-nums whitespace-nowrap leading-tight">
                                   <div className="flex flex-col items-end leading-tight">
                                     <span>
                                       {item.hasil > 0 ? `${formatPct(item.susutPct)}%` : '-'}
@@ -1957,11 +2002,18 @@ function doPost(e) {
                                   </div>
                                 </td>
 
-                                {/* KOLOM STATUS DEVIASI + TOOLTIP / SHEET DIAGNOSA KILAT */}
-                                <td className="py-1.5 px-2 text-center whitespace-nowrap">
+                                {/* KOLOM STATUS DEVIASI + HOVER DIAGNOSA KILAT + KLIK QUICK TAG */}
+                                <td className="py-1.5 px-1.5 lg:px-2 text-center whitespace-nowrap">
                                   {evalItem && (
                                     <button
                                       type="button"
+                                      title={
+                                        evalItem.tags.length > 0
+                                          ? `Tag Lapangan: ${evalItem.tags.join(', ')}${
+                                              evalItem.catatan ? ` ("${evalItem.catatan}")` : ''
+                                            } — Klik untuk ubah`
+                                          : 'Arahkan kursor untuk Diagnosa Kilat · Klik untuk isi Quick Tag Lapangan'
+                                      }
                                       onMouseEnter={(e) => {
                                         if (!isDesktopHoverCapable()) return;
                                         const r = e.currentTarget.getBoundingClientRect();
@@ -1980,6 +2032,10 @@ function doPost(e) {
                                         setDiagPopover(null);
                                       }}
                                       onClick={(e) => {
+                                        if (isDesktopHoverCapable()) {
+                                          openQuickTagEditor(item, evalItem);
+                                          return;
+                                        }
                                         const r = e.currentTarget.getBoundingClientRect();
                                         setDiagPopover((prev) =>
                                           prev?.item.id === item.id
@@ -2029,61 +2085,14 @@ function doPost(e) {
                                           {formatPct(evalItem.deviasiPct)}%
                                         </span>
                                       )}
+                                      {evalItem.tags.length > 0 && (
+                                        <Tag className="w-2.5 h-2.5 text-blue-600 shrink-0 ml-0.5" />
+                                      )}
                                     </button>
                                   )}
                                 </td>
 
-                                {/* KOLOM QUICK TAG LAPANGAN (MANDOR) */}
-                                <td className="py-1.5 px-2">
-                                  {evalItem && (
-                                    <div className="flex flex-col items-start">
-                                      {evalItem.tags.length > 0 ? (
-                                        <button
-                                          type="button"
-                                          onClick={() => openQuickTagEditor(item, evalItem)}
-                                          className="text-left group/tag cursor-pointer"
-                                          title="Klik untuk mengubah alasan lapangan"
-                                        >
-                                          <div className="text-[10.5px] font-semibold text-blue-700 group-hover/tag:underline leading-tight whitespace-nowrap">
-                                            {evalItem.tags[0]}
-                                            {evalItem.tags.length > 1 && (
-                                              <span className="text-slate-500 font-normal">
-                                                {' '}
-                                                +{evalItem.tags.length - 1}
-                                              </span>
-                                            )}
-                                          </div>
-                                          {evalItem.catatan && (
-                                            <div className="text-[10px] text-slate-500 truncate max-w-[150px]">
-                                              &ldquo;{evalItem.catatan}&rdquo;
-                                            </div>
-                                          )}
-                                        </button>
-                                      ) : (
-                                        <button
-                                          type="button"
-                                          onClick={() => openQuickTagEditor(item, evalItem)}
-                                          className={`min-h-[28px] lg:min-h-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-semibold border transition-colors whitespace-nowrap cursor-pointer ${
-                                            evalItem.status === 'oos'
-                                              ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-200'
-                                              : evalItem.status === 'waspada'
-                                              ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200'
-                                              : 'bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200'
-                                          }`}
-                                        >
-                                          <Tag className="w-3 h-3 shrink-0" />
-                                          <span>
-                                            {evalItem.status === 'oos'
-                                              ? 'Tandai Alasan'
-                                              : '+ Quick Tag'}
-                                          </span>
-                                        </button>
-                                      )}
-                                    </div>
-                                  )}
-                                </td>
-
-                                <td className="py-1.5 px-2 text-center whitespace-nowrap">
+                                <td className="py-1.5 px-1.5 lg:px-2.5 text-center whitespace-nowrap">
                                   {item.needsUpdateInRekap ? (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-semibold bg-amber-50 text-amber-800 border border-amber-300 tabular-nums">
                                       <AlertCircle className="w-3 h-3 text-amber-600 shrink-0" />
@@ -2122,31 +2131,28 @@ function doPost(e) {
                               Total Neraca ({completedItems.length} Selesai / {dhpItems.length}{' '}
                               Aktif):
                             </td>
-                            <td className="py-1.5 px-2 text-right font-mono text-slate-900 font-bold tabular-nums whitespace-nowrap">
+                            <td className="py-1.5 px-1.5 lg:px-2 text-right font-mono text-slate-900 font-bold tabular-nums whitespace-nowrap">
                               {formatNum(totalBaku)}
                             </td>
-                            <td className="py-1.5 px-2 text-right font-mono text-emerald-800 font-bold tabular-nums whitespace-nowrap">
+                            <td className="py-1.5 px-1.5 lg:px-2 text-right font-mono text-emerald-800 font-bold tabular-nums whitespace-nowrap">
                               {formatNum(totalHasil)}
                             </td>
-                            <td className="py-1.5 px-2 text-right font-mono text-rose-700 font-bold tabular-nums whitespace-nowrap">
+                            <td className="py-1.5 px-1.5 lg:px-2 text-right font-mono text-rose-700 font-bold tabular-nums whitespace-nowrap">
                               {completedItems.length > 0 ? formatNum(totalSusutKg) : '-'}
                             </td>
-                            <td className="py-1.5 px-2 text-right font-mono text-slate-900 font-bold tabular-nums whitespace-nowrap">
+                            <td className="py-1.5 px-1.5 lg:px-2 text-right font-mono text-slate-900 font-bold tabular-nums whitespace-nowrap">
                               {completedItems.length > 0
                                 ? `${formatPct(overallSusutPct)}%`
                                 : '-'}
                             </td>
-                            <td className="py-1.5 px-2 text-center text-[10px] font-mono text-slate-700 whitespace-nowrap">
+                            <td className="py-1.5 px-1.5 lg:px-2 text-center text-[10px] font-mono text-slate-700 whitespace-nowrap">
                               {oosBatchCount > 0
                                 ? `${oosBatchCount} OOS`
                                 : inProgressCount === dhpItems.length
                                 ? `${inProgressCount} Proses`
                                 : 'Terkendali'}
                             </td>
-                            <td className="py-1.5 px-2 text-[10px] text-slate-600 whitespace-nowrap">
-                              {evalValues.filter((e) => e.tags.length > 0).length} Bertag
-                            </td>
-                            <td className="py-1.5 px-2 text-center text-[10px] text-emerald-700 font-semibold whitespace-nowrap">
+                            <td className="py-1.5 px-1.5 lg:px-2 text-center text-[10px] text-emerald-700 font-semibold whitespace-nowrap">
                               {matchedCount}/{dhpItems.length} Terverifikasi
                             </td>
                           </tr>
@@ -2275,6 +2281,19 @@ function doPost(e) {
                         </strong>{' '}
                         {diagPopover.evalData.penjelasanKilat}
                       </div>
+
+                      {diagPopover.evalData.tags.length > 0 ? (
+                        <div className="pt-1.5 border-t border-slate-800 text-[10px] text-blue-300 leading-snug">
+                          <strong>Tag Lapangan:</strong> {diagPopover.evalData.tags.join(', ')}
+                          {diagPopover.evalData.catatan
+                            ? ` — "${diagPopover.evalData.catatan}"`
+                            : ''}
+                        </div>
+                      ) : (
+                        <div className="pt-1 text-[9.5px] text-slate-400">
+                          Klik lencana Status Deviasi untuk mencatat Quick Tag lapangan
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2779,9 +2798,14 @@ function doPost(e) {
                     : `Semua ${dhpItems.length} batch aktif sudah tersinkronisasi di Sheet Rekap.`}
                 </span>
                 {untaggedOosCount > 0 && (
-                  <span className="font-semibold text-rose-700">
-                    · {untaggedOosCount} OOS belum bertag
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('analisis_harian')}
+                    className="font-semibold text-rose-700 hover:underline cursor-pointer"
+                    title="Buka tab Analisis Harian untuk meninjau & menandai alasan batch OOS"
+                  >
+                    · {untaggedOosCount} OOS belum bertag (Cek Analisis Harian)
+                  </button>
                 )}
               </div>
 
