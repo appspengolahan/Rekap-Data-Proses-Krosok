@@ -48,7 +48,9 @@ import {
   formatPct,
   getDhpActiveSheetDateLabel,
   getDhpActiveSheetIsoDate,
-  round2
+  round2,
+  safeParseJsonResponse,
+  validateKrosokPhysics
 } from '../services/dataService';
 import {
   DEFAULT_BASELINE_META,
@@ -244,11 +246,18 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
     setTagEditorTarget(null);
   };
 
-  const completedItems = dhpItems.filter((i) => i.hasil > 0);
-  const inProgressCount = dhpItems.length - completedItems.length;
-  const needUpdateCount = completedItems.filter((i) => i.needsUpdateInRekap).length;
-  const matchedCount = dhpItems.filter((i) => i.isMatchedInRekap && !i.needsUpdateInRekap).length;
-  const newCount = completedItems.filter((i) => !i.isMatchedInRekap).length;
+  const physicsAnomalyItems = dhpItems.filter((i) => i.isPhysicsAnomaly);
+  const completedItems = dhpItems.filter((i) => i.hasil > 0 && !i.isPhysicsAnomaly);
+  const inProgressCount = dhpItems.filter((i) => i.hasil <= 0 && !i.isPhysicsAnomaly).length;
+  const needUpdateCount = completedItems.filter(
+    (i) => i.needsUpdateInRekap && !i.isRestoredFromRekap
+  ).length;
+  const matchedCount = dhpItems.filter(
+    (i) => i.isMatchedInRekap && !i.needsUpdateInRekap && !i.isPhysicsAnomaly
+  ).length;
+  const newCount = completedItems.filter(
+    (i) => !i.isMatchedInRekap && !i.isRestoredFromRekap
+  ).length;
   const totalBaku = dhpItems.reduce((acc, i) => acc + i.baku, 0);
   const completedBaku = completedItems.reduce((acc, i) => acc + i.baku, 0);
   const totalHasil = completedItems.reduce((acc, i) => acc + i.hasil, 0);
@@ -299,8 +308,10 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
         purgedCancelledCount?: number;
         purgedTemplateCount?: number;
         protectedCount?: number;
+        quarantinedCount?: number;
         summary?: string;
       } | null = null;
+      let gasStreamNotice: string | null = null;
 
       if (config.gasUrl && config.gasUrl.startsWith('http')) {
         try {
@@ -313,11 +324,15 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
             }),
             redirect: 'follow'
           });
-          if (postRes.ok) {
-            const postJson = await postRes.json();
-            if (postJson && postJson.result) {
-              gasSummaryResult = postJson.result;
+          const parsedRes = await safeParseJsonResponse<any>(postRes);
+          if (parsedRes.data) {
+            if (parsedRes.data.success === false && parsedRes.data.error) {
+              gasStreamNotice = String(parsedRes.data.error);
+            } else if (parsedRes.data.result) {
+              gasSummaryResult = parsedRes.data.result;
             }
+          } else if (parsedRes.parseError) {
+            gasStreamNotice = parsedRes.parseError;
           }
         } catch (e) {
           console.warn('Network notice during GAS reconciliation post:', e);
@@ -354,6 +369,11 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
             beforeCount - afterCount
           } baris rencana batal dibersihkan (${afterCount} baris tersisa).`
         );
+      } else if (gasStreamNotice && beforeCount > 0) {
+        setSyncFeedbackTone('amber');
+        setSyncSuccessMsg(
+          `Proteksi Koneksi Aktif (${gasStreamNotice}) — Silakan perbarui skrip GAS versi terbaru (optimasi findActualLastRow_) agar eksekusi instan tanpa jeda.`
+        );
       } else if (beforeCount > 0 && afterCount >= beforeCount) {
         setSyncFeedbackTone('amber');
         setSyncSuccessMsg(
@@ -386,11 +406,24 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
     setSyncFeedbackTone('emerald');
 
     try {
-      // Strictly sync ONLY completed batches (hasil > 0) — never send unfinished hasil=0 rows to Rekap!
+      // Layer 1 & Layer 2 Guard: Strictly sync ONLY completed batches (hasil > 0) passing physics boundaries,
+      // and skip batches restored from Rekap after midnight rollover (already verified in Rekap ledger).
+      const validCompletedFilter = (i: DhpKrosokItem) =>
+        i.hasil > 0 &&
+        !i.isPhysicsAnomaly &&
+        !i.isRestoredFromRekap &&
+        validateKrosokPhysics({
+          baku: i.baku,
+          hasil: i.hasil,
+          gagangKg: i.gagangKg,
+          airKg: i.airKg,
+          debuKg: i.debuKg
+        }).valid;
+
       const completedUnsynced = dhpItems.filter(
-        (i) => i.hasil > 0 && (!i.isMatchedInRekap || i.needsUpdateInRekap)
+        (i) => validCompletedFilter(i) && (!i.isMatchedInRekap || i.needsUpdateInRekap)
       );
-      const completedAll = dhpItems.filter((i) => i.hasil > 0);
+      const completedAll = dhpItems.filter(validCompletedFilter);
       const targetItems =
         completedUnsynced.length > 0 ? completedUnsynced : completedAll;
 
@@ -401,13 +434,24 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
 
       if (targetItems.length === 0 && purgeableCount === 0) {
         setSyncFeedbackTone('amber');
-        setSyncSuccessMsg(
-          'Seluruh batch aktif di Sheet DHP saat ini masih dalam proses pengolahan (Netto Hasil belum selesai ditimbang). Tidak ada baris setengah jadi yang dikirim ke Rekap.'
-        );
+        if (physicsAnomalyItems.length > 0) {
+          setSyncSuccessMsg(
+            `Pengaman Fisika Aktif: ${physicsAnomalyItems.length} baris berstatus Anomali Neraca Massa dikarantina otomatis (tidak dikirim ke Buku Besar Rekap). Perbaiki angka timbangan di Sheet DHP terlebih dahulu.`
+          );
+        } else if (dhpItems.some((i) => i.isRestoredFromRekap)) {
+          setSyncFeedbackTone('emerald');
+          setSyncSuccessMsg(
+            'Seluruh batch pada tanggal ini sudah terverifikasi aman di Buku Besar Rekap (terlindungi otomatis dari pergantian hari 00:00 WIB di Sheet DHP).'
+          );
+        } else {
+          setSyncSuccessMsg(
+            'Seluruh batch aktif di Sheet DHP saat ini masih dalam proses pengolahan (Netto Hasil belum selesai ditimbang). Tidak ada baris setengah jadi yang dikirim ke Rekap.'
+          );
+        }
         return;
       }
 
-      // Construct records to append (strictly hasil > 0)
+      // Construct records to append (strictly hasil > 0 & physics-verified)
       const convertedRecords: KrosokRecord[] = targetItems.map((item, idx) => {
         const debuAirKg = round2((item.airKg || 0) + (item.debuKg || 0));
         return {
@@ -432,8 +476,9 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
         };
       });
 
-      // Send to GAS (runs two-way sync: Bottom-Up Auto-Purge + Upsert Completed DHP + Formula Protection)
+      // Send to GAS (runs 4-Layer Protected Sync + Safe Stream JSON Parsing)
       let gasSyncSummary: string | null = null;
+      let gasSyncError: string | null = null;
       if (config.gasUrl && config.gasUrl.startsWith('http')) {
         try {
           const postRes = await fetch(config.gasUrl, {
@@ -446,11 +491,15 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
             }),
             redirect: 'follow'
           });
-          if (postRes.ok) {
-            const postJson = await postRes.json();
-            if (postJson?.result?.summary) {
-              gasSyncSummary = postJson.result.summary;
+          const parsedRes = await safeParseJsonResponse<any>(postRes);
+          if (parsedRes.data) {
+            if (parsedRes.data.success === false && parsedRes.data.error) {
+              gasSyncError = String(parsedRes.data.error);
+            } else if (parsedRes.data.result?.summary) {
+              gasSyncSummary = parsedRes.data.result.summary;
             }
+          } else if (parsedRes.parseError) {
+            gasSyncError = parsedRes.parseError;
           }
         } catch (e) {
           console.warn('Network notice during GAS post:', e);
@@ -469,12 +518,23 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
       const freshAudit = await fetchRekapActiveDateAudit(config, latestDhp);
       setRealizationAudit(freshAudit);
 
-      setSyncFeedbackTone('emerald');
-      setSyncSuccessMsg(
-        gasSyncSummary
-          ? `Sinkronisasi 2 Arah Berhasil — ${gasSyncSummary}`
-          : `Berhasil menyinkronkan ${convertedRecords.length} batch selesai dari DHP Krosok ke Sheet Rekap Susut Krosok (+ rekonsiliasi otomatis tanggal aktif)!`
-      );
+      if (gasSyncError) {
+        setSyncFeedbackTone('amber');
+        setSyncSuccessMsg(
+          `Data lokal diselaraskan, namun respons GAS memberi catatan: ${gasSyncError}`
+        );
+      } else {
+        const quarantineNote =
+          physicsAnomalyItems.length > 0
+            ? ` (${physicsAnomalyItems.length} baris anomali fisika dikarantina aman)`
+            : '';
+        setSyncFeedbackTone('emerald');
+        setSyncSuccessMsg(
+          gasSyncSummary
+            ? `Sinkronisasi 2 Arah Berhasil — ${gasSyncSummary}${quarantineNote}`
+            : `Berhasil menyinkronkan ${convertedRecords.length} batch selesai dari DHP Krosok ke Sheet Rekap Susut Krosok${quarantineNote}!`
+        );
+      }
     } catch (err: any) {
       setSyncFeedbackTone('emerald');
       setSyncSuccessMsg('Sinkronisasi selesai (Data diselaraskan).');
@@ -482,27 +542,27 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
       setSyncingToRekap(false);
       setTimeout(() => {
         setSyncSuccessMsg(null);
-      }, 6000);
+      }, 6500);
     }
   };
 
   const appsScriptCode = `/**
  * ============================================================================
- * GOOGLE APPS SCRIPT: INTEGRASI 2 ARAH, AUTO-PURGE BATAL & REKONSILIASI DHP KROSOK
+ * GOOGLE APPS SCRIPT: INTEGRASI 2 ARAH, 4-LAYER DEFENSE & AUTO-PURGE DHP KROSOK
  * File Target di Google Apps Script: IntegrasiDHP.gs
  *
  * Sheet Sumber : DHP KROSOK (${config.dhpSpreadsheetId}) [Tab: ${config.dhpSheetName}]
  * Sheet Tujuan : REKAP SUSUT KROSOK (${config.spreadsheetId}) [Tab: ${config.sheetName}]
  *
- * ARSITEKTUR PENGAMAN MUTLAK (FAIL-SAFE & PROTEKSI RUMUS 100%):
- * 1. Reverse Scanning (Bottom-Up): Menelusuri baris Tanggal Aktif dari bawah ke atas
- *    (k = length - 1; k >= 0; k--) sehingga deleteRow() tidak pernah menggeser indeks di atasnya.
- * 2. Auto-Purge Template Kosong (Baku = 0 Kg, Hasil = 0 Kg) & Rencana Batal (Baku > 0 Kg,
- *    Hasil = 0 Kg, varian tidak ada di DHP aktif).
- * 3. FAIL-SAFE MUTLAK: Hanya baris dengan Netto Hasil === 0 pada Tanggal Aktif yang dapat
- *    dihapus. Baris dengan Netto Hasil > 0 atau tanggal historis HARAM dihapus otomatis!
- * 4. PROTEKSI RUMUS 100%: Kolom C (Bulan), D (Tahun), E (Join Perlakuan), J (Susut Kg),
- *    dan K (Susut %) TIDAK PERNAH ditimpa nilai statis & disalin otomatis via PASTE_FORMULA.
+ * STANDAR ARSITEKTUR 4-LAYER DEFENSE & OPTIMASI KECEPATAN:
+ * - Layer 1 (Non-Destructive Zero Guard): Menolak mutlak penimpaan Netto Hasil > 0 dengan 0
+ *   (termasuk saat pergantian tanggal otomatis =TODAY() pukul 00:00 WIB di Sheet DHP).
+ * - Layer 2 (Physics & Mass-Balance Boundary): Mengkarantina otomatis baris DHP jika
+ *   Gagang/Air/Debu < 0 Kg atau Susut > 35% / < -15% agar salah ketik timbangan tidak merusak Rekap.
+ * - Layer 3 (Idempotent Ledger & Reverse Scan Fail-Safe): Hanya baris Tanggal Aktif dengan
+ *   Netto Hasil === 0 yang dapat dibersihkan (Bottom-Up). Rumus Kolom C, D, E, J, K aman 100%.
+ * - Layer 4 (Resilient Error Boundary & Fast Row Scanner): Menggunakan findActualLastRow_()
+ *   sejak Tahap B & C untuk melewati >1.000 baris rumus kosong (mencegah timeout / JSON terpotong).
  * ============================================================================
  */
 
@@ -539,6 +599,42 @@ function notifikasiUiAman_(pesan, judul) {
 }
 
 /**
+ * Optimasi Kecepatan: Mencari baris terakhir yang benar-benar berisi Tanggal Proses (Kolom B),
+ * mengabaikan ratusan/ribuan baris template rumus kosong di bawahnya agar bebas timeout!
+ */
+function findActualLastRow_(sheet) {
+  var max = sheet.getLastRow();
+  if (max < 12) return 11;
+  var colB = sheet.getRange(12, 2, max - 11, 1).getValues();
+  for (var idx = colB.length - 1; idx >= 0; idx--) {
+    var v = colB[idx][0];
+    if (v instanceof Date || (typeof v === 'string' && v.trim() !== '')) {
+      return 12 + idx;
+    }
+  }
+  return 11;
+}
+
+/**
+ * Layer 2 — Validasi Batas Fisika & Neraca Massa Krosok
+ */
+function validasiFisikaKrosok_(baku, hasil, gagang, air, debu) {
+  if (debu < 0 || gagang < 0 || air < 0) {
+    return { valid: false, reason: 'Fraksi limbah bernilai negatif (Debu/Gagang/Air < 0 Kg)' };
+  }
+  if (hasil > 0 && baku > 0) {
+    var susutPct = ((baku - hasil) / baku) * 100;
+    if (susutPct > 35) {
+      return { valid: false, reason: 'Susut ekstrem ' + susutPct.toFixed(1) + '% (> 35%)' };
+    }
+    if (susutPct < -15) {
+      return { valid: false, reason: 'Hasil melampaui batas serap uap fisik (> 115% Baku)' };
+    }
+  }
+  return { valid: true, reason: '' };
+}
+
+/**
  * 1. FUNGSI UTAMA SINKRONISASI 2 ARAH (Trigger 5 Menit, Menu Manual & Web App)
  */
 function sinkronkanDhpKeRekap() {
@@ -564,7 +660,7 @@ function syncDhpToRekap(options) {
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(15000)) {
     Logger.log('Sinkronisasi dilewati: proses lain sedang berjalan.');
-    return { skipped: true };
+    return { skipped: true, summary: 'Sinkronisasi sedang berjalan di proses lain.' };
   }
 
   try {
@@ -583,7 +679,7 @@ function syncDhpToRekap(options) {
       return { error: 'Sheet tidak ditemukan' };
     }
 
-    // --- TAHAP A: BACA DATA AKTIF DARI SHEET DHP KROSOK ---
+    // --- TAHAP A: BACA DATA AKTIF DARI SHEET DHP KROSOK + LAYER 2 SANITY CHECK ---
     var dhpData = shDhp.getDataRange().getValues();
     var headerIsoDate = '';
     for (var h = 0; h < Math.min(dhpData.length, 4); h++) {
@@ -593,8 +689,9 @@ function syncDhpToRekap(options) {
       }
     }
 
-    var allActiveDhp = []; // Seluruh varian aktif di DHP (baik sudah selesai maupun sedang proses)
-    var completedDhp = []; // Hanya varian yang sudah memiliki Netto Hasil > 0
+    var allActiveDhp = []; // Seluruh varian aktif di DHP (agar tidak terhapus salah sebagai batal)
+    var completedDhp = []; // Hanya varian selesai (Hasil > 0) yang LULUS batas fisika Layer 2
+    var quarantinedCount = 0;
 
     for (var i = 0; i < dhpData.length; i++) {
       var row = dhpData[i];
@@ -609,7 +706,7 @@ function syncDhpToRekap(options) {
         var air = Number(row[6]) || 0;
         var debu = Number(row[7]) || 0;
 
-        var cellHasil = row[8]; // Kolom I: HASIL PROSES (boolean false jika belum ditimbang)
+        var cellHasil = row[8]; // Kolom I: HASIL PROSES (boolean false jika belum ditimbang / lewat 00:00 WIB)
         var rawHasilVal = typeof cellHasil === 'number' ? cellHasil : 0;
         var rawSusutKgVal = typeof row[9] === 'number' ? row[9] : 0;
         var hasil = rawHasilVal > 0 ? Math.round(rawHasilVal * 100) / 100 : 0;
@@ -634,7 +731,12 @@ function syncDhpToRekap(options) {
         };
 
         allActiveDhp.push(dhpEntry);
-        if (hasil > 0) {
+
+        var cekFisika = validasiFisikaKrosok_(rawBaku, hasil, gagang, air, debu);
+        if (!cekFisika.valid) {
+          quarantinedCount++;
+          Logger.log('KARANTINA FISIKA: ' + rawTembakau + ' -> ' + cekFisika.reason);
+        } else if (hasil > 0) {
           completedDhp.push(dhpEntry);
         }
       }
@@ -648,10 +750,10 @@ function syncDhpToRekap(options) {
     var purgedCancelledCount = 0;
     var purgedTemplateCount = 0;
     var protectedCount = 0;
+    var scanMaxRow = findActualLastRow_(shRekap);
 
-    if (targetActiveIsoDate && /^\\d{4}-\\d{2}-\\d{2}$/.test(targetActiveIsoDate) && shRekap.getLastRow() >= 12) {
-      var scanMaxRow = shRekap.getLastRow();
-      var scanValues = shRekap.getRange(12, 2, scanMaxRow - 11, 8).getValues(); // Kolom B..I
+    if (targetActiveIsoDate && /^\\d{4}-\\d{2}-\\d{2}$/.test(targetActiveIsoDate) && scanMaxRow >= 12) {
+      var scanValues = shRekap.getRange(12, 2, scanMaxRow - 11, 8).getValues(); // Kolom B..I hanya s/d baris isi riil
       var activeRekapRows = [];
 
       for (var r = 0; r < scanValues.length; r++) {
@@ -733,7 +835,7 @@ function syncDhpToRekap(options) {
         var isRencanaBatal = (item.rBaku > 0 && item.rHasil <= 0 && !item.matched);
 
         if (isTemplateKosong || isRencanaBatal) {
-          if (checkRow === 12 && shRekap.getLastRow() <= 12) {
+          if (checkRow === 12 && findActualLastRow_(shRekap) <= 12) {
             // Proteksi Master Formula Baris 12: bersihkan sel non-rumus saja (C, D, E, J, K tetap utuh)
             shRekap.getRange(12, 2).clearContent();
             shRekap.getRange(12, 6, 1, 4).clearContent();
@@ -747,20 +849,7 @@ function syncDhpToRekap(options) {
       }
     }
 
-    // --- TAHAP C: PEMBUKUAN & UPDATE BATCH SELESAI (HASIL > 0) DENGAN PROTEKSI RUMUS ---
-    function findActualLastRow_(sheet) {
-      var max = sheet.getLastRow();
-      if (max < 12) return 11;
-      var colB = sheet.getRange(12, 2, max - 11, 1).getValues();
-      for (var idx = colB.length - 1; idx >= 0; idx--) {
-        var v = colB[idx][0];
-        if (v instanceof Date || (typeof v === 'string' && v.trim() !== '')) {
-          return 12 + idx;
-        }
-      }
-      return 11;
-    }
-
+    // --- TAHAP C: PEMBUKUAN & UPDATE BATCH SELESAI (HASIL > 0) DENGAN 4-LAYER DEFENSE ---
     var lastRow = findActualLastRow_(shRekap);
     var rekapEntries = [];
     if (lastRow >= 12) {
@@ -789,6 +878,10 @@ function syncDhpToRekap(options) {
 
     for (var c = 0; c < completedDhp.length; c++) {
       var dBatch = completedDhp[c];
+      // Layer 1 & Layer 2 Double-Lock: Tolak mutlak jika Hasil <= 0 atau tidak lulus batas fisika
+      if (!dBatch.hasil || dBatch.hasil <= 0) continue;
+      if (!validasiFisikaKrosok_(dBatch.baku, dBatch.hasil, dBatch.gagang, dBatch.air, dBatch.debu).valid) continue;
+
       var matchEntry = null;
 
       // Cari kecocokan presisi (Tanggal + Varian + Baku) atau baris template varian yang sama (Hasil === 0)
@@ -842,6 +935,9 @@ function syncDhpToRekap(options) {
         appendedCount++;
       } else {
         matchEntry.used = true;
+        // Layer 1 Non-Destructive Guard: HARAM menimpa curHasil > 0 dengan angka <= 0
+        if (matchEntry.curHasil > 0 && dBatch.hasil <= 0) continue;
+
         if (Math.abs(matchEntry.curHasil - dBatch.hasil) >= 0.5 || Math.abs(matchEntry.curBaku - dBatch.baku) >= 0.5) {
           // Update kolom mentah tanpa menyentuh rumus C, D, E, J, K
           shRekap.getRange(matchEntry.rowNum, 6).setValue(dBatch.tembakau);
@@ -864,10 +960,11 @@ function syncDhpToRekap(options) {
       ' | Batch Baru: ' + appendedCount +
       ' | Update Hasil: ' + updatedCount +
       (protectedCount > 0 ? ' | Dilindungi Fail-Safe (Hasil>0): ' + protectedCount : '') +
+      (quarantinedCount > 0 ? ' | Dikarantina Fisika: ' + quarantinedCount : '') +
       ' | Rumus C, D, E, J, K Aman 100%.';
 
     notifikasiUiAman_(
-      totalPurged > 0 || appendedCount > 0 || updatedCount > 0
+      totalPurged > 0 || appendedCount > 0 || updatedCount > 0 || quarantinedCount > 0
         ? summaryMsg
         : 'Seluruh data Rekap & DHP sudah selaras dan bersih (0 baris batal).',
       'Integrasi DHP Krosok'
@@ -880,10 +977,15 @@ function syncDhpToRekap(options) {
       appendedCount: appendedCount,
       updatedCount: updatedCount,
       protectedCount: protectedCount,
+      quarantinedCount: quarantinedCount,
       summary: summaryMsg
     };
+  } catch (err) {
+    var errMsg = String((err && err.message) || err || 'Unknown GAS Error');
+    Logger.log('ERROR syncDhpToRekap: ' + errMsg);
+    return { error: errMsg, summary: 'Gagal: ' + errMsg };
   } finally {
-    lock.releaseLock();
+    try { lock.releaseLock(); } catch (e) {}
   }
 }
 
@@ -901,7 +1003,7 @@ function aktifkanAutoPush5Menit() {
     .timeBased()
     .everyMinutes(5)
     .create();
-  notifikasiUiAman_('Auto-Push 5 Menit AKTIF (Sinkronisasi & Auto-Purge Batal berjalan otomatis).', 'Auto-Push DHP Krosok');
+  notifikasiUiAman_('Auto-Push 5 Menit AKTIF (4-Layer Defense & Auto-Purge berjalan otomatis).', 'Auto-Push DHP Krosok');
 }
 
 function matikanAutoPush() {
@@ -923,7 +1025,7 @@ function cekStatusPemicu() {
     if (triggers[i].getHandlerFunction() === 'sinkronkanDhpKeRekap') active++;
   }
   var msg = active > 0
-    ? 'AKTIF (' + active + ' pemicu berjalan otomatis setiap 5 menit dengan pengaman Auto-Purge Hasil=0).'
+    ? 'AKTIF (' + active + ' pemicu berjalan otomatis setiap 5 menit dengan pengaman 4-Layer Defense).'
     : 'NONAKTIF (Belum ada pemicu waktu aktif. Pilih "⏰ Aktifkan Auto-Push 5 Menit" untuk mengaktifkan).';
   notifikasiUiAman_(msg, 'Status Pemicu DHP Krosok');
   try {
@@ -936,7 +1038,7 @@ function perbaikiHasilNolDiRekap() {
 }
 
 /**
- * 4. ENDPOINT WEB APP (Menerima Tombol 1-Klik "Bersihkan Batch Batal Live" dari Web App)
+ * 4. ENDPOINT WEB APP (Layer 4 Resilient Error Boundary — Selalu Mengembalikan JSON Utuh)
  */
 function doPost(e) {
   try {
@@ -945,11 +1047,17 @@ function doPost(e) {
       mode: payload.action === 'reconcileActiveDate' ? 'reconcile' : 'sync',
       activeDateHint: payload.activeIsoDate || ''
     });
+    if (res && res.error) {
+      return ContentService.createTextOutput(JSON.stringify({ success: false, error: res.error, result: res }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
     return ContentService.createTextOutput(JSON.stringify({ success: true, result: res }))
       .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.message }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: String((err && err.message) || err || 'Unhandled GAS Exception')
+    })).setMimeType(ContentService.MimeType.JSON);
   }
 }`;
 
@@ -1405,6 +1513,29 @@ function doPost(e) {
                   </div>
                 </div>
               )}
+
+              {/* Layer 2 Physics & Mass-Balance Quarantine Alert (Visible only when physical anomalies exist) */}
+              {physicsAnomalyItems.length > 0 && (
+                <div className="px-3 sm:px-3.5 py-2 rounded-lg bg-rose-50 border border-rose-300 text-rose-900 flex items-start gap-2 text-xs">
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1 leading-snug">
+                    <div className="font-bold text-rose-800">
+                      Karantina Neraca Massa Fisika ({physicsAnomalyItems.length} Batch Diblokir
+                      Otomatis dari Sinkronisasi Rekap):
+                    </div>
+                    <div className="text-[11px] text-rose-700 mt-0.5">
+                      {physicsAnomalyItems
+                        .map(
+                          (a) =>
+                            `${a.jenisTembakau} (${
+                              a.physicsAnomalyReason || 'Melanggar batas fisika'
+                            })`
+                        )
+                        .join(' · ')}
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* Compact 3-Column Metrics Strip */}
               <div
                 className={`grid ${
@@ -1767,7 +1898,18 @@ function doPost(e) {
                                 <div className="text-[10px] text-slate-500">Hasil (Kg)</div>
                                 <div className="font-mono text-xs font-bold mt-0.5">
                                   {item.hasil > 0 ? (
-                                    <span className="text-emerald-800">
+                                    <span
+                                      className={
+                                        item.isPhysicsAnomaly
+                                          ? 'text-rose-700'
+                                          : 'text-emerald-800'
+                                      }
+                                      title={
+                                        item.isRestoredFromRekap
+                                          ? 'Nilai final terverifikasi dari Buku Besar Rekap (terlindungi saat pergantian hari 00:00 WIB di Sheet DHP)'
+                                          : undefined
+                                      }
+                                    >
                                       {formatNum(item.hasil)}
                                     </span>
                                   ) : (
@@ -1795,7 +1937,15 @@ function doPost(e) {
                             {/* Bottom Row: Rekap Status + Diagnosa & Quick Tag Actions */}
                             <div className="flex items-center justify-between gap-2 pt-0.5">
                               <div className="text-[11px] min-w-0">
-                                {item.needsUpdateInRekap ? (
+                                {item.isPhysicsAnomaly ? (
+                                  <span
+                                    className="font-semibold text-rose-700 inline-flex items-center gap-1"
+                                    title={item.physicsAnomalyReason}
+                                  >
+                                    <AlertTriangle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                                    <span>Diblokir (Anomali Fisika)</span>
+                                  </span>
+                                ) : item.needsUpdateInRekap ? (
                                   <span className="font-semibold text-amber-800 inline-flex items-center gap-1">
                                     <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                                     <span>
@@ -1804,7 +1954,14 @@ function doPost(e) {
                                     </span>
                                   </span>
                                 ) : item.isMatchedInRekap ? (
-                                  <span className="font-semibold text-emerald-700 inline-flex items-center gap-1">
+                                  <span
+                                    className="font-semibold text-emerald-700 inline-flex items-center gap-1"
+                                    title={
+                                      item.isRestoredFromRekap
+                                        ? 'Data terverifikasi di Buku Besar Rekap (terlindungi saat pergantian hari 00:00 WIB di Sheet DHP)'
+                                        : undefined
+                                    }
+                                  >
                                     <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                                     <span>Cocok di Rekap (Brs {item.matchedRow})</span>
                                   </span>
@@ -1974,7 +2131,18 @@ function doPost(e) {
                                 </td>
                                 <td className="py-1.5 px-1.5 lg:px-2 text-right font-mono font-medium text-slate-700 tabular-nums whitespace-nowrap">
                                   {item.hasil > 0 ? (
-                                    <span className="font-semibold text-emerald-800">
+                                    <span
+                                      className={`font-semibold ${
+                                        item.isPhysicsAnomaly
+                                          ? 'text-rose-700'
+                                          : 'text-emerald-800'
+                                      }`}
+                                      title={
+                                        item.isRestoredFromRekap
+                                          ? 'Nilai final terverifikasi dari Buku Besar Rekap (terlindungi saat pergantian hari 00:00 WIB di Sheet DHP)'
+                                          : undefined
+                                      }
+                                    >
                                       {formatNum(item.hasil)}
                                     </span>
                                   ) : (
@@ -2093,7 +2261,15 @@ function doPost(e) {
                                 </td>
 
                                 <td className="py-1.5 px-1.5 lg:px-2.5 text-center whitespace-nowrap">
-                                  {item.needsUpdateInRekap ? (
+                                  {item.isPhysicsAnomaly ? (
+                                    <span
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-semibold bg-rose-50 text-rose-700 border border-rose-300"
+                                      title={item.physicsAnomalyReason}
+                                    >
+                                      <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                                      <span>Diblokir (Anomali)</span>
+                                    </span>
+                                  ) : item.needsUpdateInRekap ? (
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-semibold bg-amber-50 text-amber-800 border border-amber-300 tabular-nums">
                                       <AlertCircle className="w-3 h-3 text-amber-600 shrink-0" />
                                       <span>
@@ -2102,7 +2278,14 @@ function doPost(e) {
                                       </span>
                                     </span>
                                   ) : item.isMatchedInRekap ? (
-                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 tabular-nums">
+                                    <span
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10.5px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 tabular-nums"
+                                      title={
+                                        item.isRestoredFromRekap
+                                          ? 'Data terverifikasi di Buku Besar Rekap (terlindungi saat pergantian hari 00:00 WIB di Sheet DHP)'
+                                          : undefined
+                                      }
+                                    >
                                       <Check className="w-3 h-3 text-emerald-600 shrink-0" />
                                       <span>Cocok (Brs {item.matchedRow})</span>
                                     </span>

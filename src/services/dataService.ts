@@ -299,6 +299,113 @@ function normalizeKrosokRecord(
   };
 }
 
+export interface KrosokPhysicsValidation {
+  valid: boolean;
+  reason?: string;
+}
+
+/**
+ * Layer 2 — Sanity Check & Physics Boundary untuk Neraca Massa Krosok:
+ * Menolak fraksi limbah negatif (Gagang/Air/Debu < 0) dan salah ketik timbangan ekstrem
+ * (Susut > 35% atau Hasil > 115% Baku), sambil tetap mengizinkan serap uap alami (misal -0,06%).
+ */
+export function validateKrosokPhysics(params: {
+  baku: number;
+  hasil: number;
+  gagangKg?: number;
+  airKg?: number;
+  debuKg?: number;
+}): KrosokPhysicsValidation {
+  const { baku, hasil, gagangKg = 0, airKg = 0, debuKg = 0 } = params;
+  if (debuKg < 0) {
+    return {
+      valid: false,
+      reason: `Fraksi Debu bernilai negatif (${debuKg.toFixed(1)} Kg) — melanggar hukum kekekalan massa`
+    };
+  }
+  if (gagangKg < 0) {
+    return {
+      valid: false,
+      reason: `Fraksi Gagang bernilai negatif (${gagangKg.toFixed(1)} Kg) — melanggar hukum kekekalan massa`
+    };
+  }
+  if (airKg < 0) {
+    return {
+      valid: false,
+      reason: `Fraksi Air bernilai negatif (${airKg.toFixed(1)} Kg) — melanggar hukum kekekalan massa`
+    };
+  }
+  if (hasil > 0 && baku > 0) {
+    const susutPct = ((baku - hasil) / baku) * 100;
+    if (susutPct > 35) {
+      return {
+        valid: false,
+        reason: `Susut ekstrem ${susutPct.toFixed(2)}% (> 35%) — indikasi salah input timbangan Hasil (${hasil.toFixed(1)} Kg dari Baku ${baku.toFixed(1)} Kg)`
+      };
+    }
+    if (susutPct < -15) {
+      return {
+        valid: false,
+        reason: `Netto Hasil (${hasil.toFixed(1)} Kg) melampaui batas serap uap fisik (> 115% dari Baku ${baku.toFixed(1)} Kg)`
+      };
+    }
+  }
+  return { valid: true };
+}
+
+/**
+ * Layer 4 — Resilient Stream & JSON Parser:
+ * Membaca payload via response.text() terlebih dahulu agar stream terpotong / timeout GAS
+ * tidak pernah memicu unhandled exception "Unexpected end of JSON input".
+ */
+export async function safeParseJsonResponse<T = any>(
+  response: Response
+): Promise<{ ok: boolean; data: T | null; rawText: string; parseError?: string }> {
+  let rawText = '';
+  try {
+    rawText = await response.text();
+  } catch (readErr: any) {
+    return {
+      ok: false,
+      data: null,
+      rawText: '',
+      parseError: readErr?.message || 'Gagal membaca aliran respons HTTP'
+    };
+  }
+  const trimmed = rawText.trim();
+  if (!trimmed) {
+    return {
+      ok: false,
+      data: null,
+      rawText,
+      parseError: 'Respons server kosong (aliran koneksi terputus / batas waktu eksekusi)'
+    };
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as T;
+    return { ok: response.ok, data: parsed, rawText };
+  } catch {
+    if (!trimmed.startsWith('<!DOCTYPE') && !trimmed.toLowerCase().startsWith('<html')) {
+      const firstBrace = trimmed.indexOf('{');
+      const lastBrace = trimmed.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace > firstBrace) {
+        try {
+          const extracted = JSON.parse(trimmed.slice(firstBrace, lastBrace + 1)) as T;
+          return { ok: response.ok, data: extracted, rawText };
+        } catch {
+          // fallthrough to structured error
+        }
+      }
+    }
+    return {
+      ok: false,
+      data: null,
+      rawText,
+      parseError: 'Format respons server terpotong atau bukan JSON valid'
+    };
+  }
+}
+
 /** Fetch data from GAS endpoint (reads full unfiltered REKAP SUSUT KROSOK sheet) */
 export async function fetchFromGAS(
   gasUrl: string,
@@ -316,7 +423,14 @@ export async function fetchFromGAS(
       console.warn(`GAS Endpoint notice (Status: ${response.status})`);
       return [];
     }
-    const data = await response.json();
+    const parsed = await safeParseJsonResponse<any>(response);
+    if (!parsed.data) {
+      if (parsed.parseError) {
+        console.warn('GAS JSON parse guard notice:', parsed.parseError);
+      }
+      return [];
+    }
+    const data = parsed.data;
     const rawList: any[] = Array.isArray(data)
       ? data
       : data && Array.isArray(data.records)
@@ -446,13 +560,23 @@ export function mergeRekapWithCompletedDhp(
     const dhpUpdate = dhpItems.find(
       (d) =>
         d.hasil > 0 &&
+        !d.isRestoredFromRekap &&
+        !d.isPhysicsAnomaly &&
         d.needsUpdateInRekap &&
+        validateKrosokPhysics({
+          baku: d.baku,
+          hasil: d.hasil,
+          gagangKg: d.gagangKg,
+          airKg: d.airKg,
+          debuKg: d.debuKg
+        }).valid &&
         (d.matchedRow === r.srcRow ||
           (d.tanggal === r.tanggal &&
             Math.abs(d.baku - r.baku) < 0.2 &&
             d.jenisTembakau.toLowerCase() === r.jenisKrosok.toLowerCase()))
     );
-    if (!dhpUpdate) return r;
+    // Layer 1 Non-Destructive Guard: never overwrite existing Hasil > 0 with <= 0 or invalid physics
+    if (!dhpUpdate || dhpUpdate.hasil <= 0) return r;
     const susutKg = round2(dhpUpdate.baku - dhpUpdate.hasil);
     const debuAirKg = round2((dhpUpdate.airKg || 0) + (dhpUpdate.debuKg || 0));
     return {
@@ -477,7 +601,26 @@ export function mergeRekapWithCompletedDhp(
 
   const newCompletedFromDhp: KrosokRecord[] = [];
   dhpItems.forEach((d, idx) => {
-    if (!d.hasil || d.hasil <= 0 || d.isMatchedInRekap) return;
+    if (
+      !d.hasil ||
+      d.hasil <= 0 ||
+      d.isMatchedInRekap ||
+      d.isRestoredFromRekap ||
+      d.isPhysicsAnomaly
+    ) {
+      return;
+    }
+    if (
+      !validateKrosokPhysics({
+        baku: d.baku,
+        hasil: d.hasil,
+        gagangKg: d.gagangKg,
+        airKg: d.airKg,
+        debuKg: d.debuKg
+      }).valid
+    ) {
+      return;
+    }
     const k = `${d.tanggal}|${d.jenisTembakau.toLowerCase()}|${d.baku.toFixed(1)}`;
     if (existingKeys.has(k)) return;
     existingKeys.add(k);
@@ -572,6 +715,8 @@ export async function fetchDhpKrosokRecords(
     }
 
     // Second pass: Parse real DHP transaction rows (Columns C..M)
+    const consumedRekapRows = new Set<number>();
+
     for (let i = 0; i < rows.length; i++) {
       const c = rows[i].c;
       if (!c || c.length < 5) continue;
@@ -590,11 +735,11 @@ export async function fetchDhpKrosokRecords(
       ) {
         const parsedDate = parseGvizDate(rawTgl);
         const baku = round2(rawBaku);
-        const gagangKg = typeof c[5]?.v === 'number' ? round2(c[5]?.v) : 0;
-        const airKg = typeof c[6]?.v === 'number' ? round2(c[6]?.v) : 0;
-        const debuKg = typeof c[7]?.v === 'number' ? round2(c[7]?.v) : 0;
+        let gagangKg = typeof c[5]?.v === 'number' ? round2(c[5]?.v) : 0;
+        let airKg = typeof c[6]?.v === 'number' ? round2(c[6]?.v) : 0;
+        let debuKg = typeof c[7]?.v === 'number' ? round2(c[7]?.v) : 0;
 
-        // Kolom I (Index 8) adalah HASIL PROSES riil di DHP (bernilai boolean `false` jika belum selesai ditimbang)
+        // Kolom I (Index 8) adalah HASIL PROSES riil di DHP (bernilai boolean `false` jika belum selesai ditimbang / berganti hari =TODAY())
         const cellHasil = c[8]?.v;
         const rawHasil =
           typeof cellHasil === 'number'
@@ -613,7 +758,7 @@ export async function fetchDhpKrosokRecords(
         let hasil = 0;
 
         if (!isNaN(rawHasil) && rawHasil > 0) {
-          // Batch sudah ditimbang hasil prosesnya secara riil
+          // Batch sudah ditimbang hasil prosesnya secara riil di DHP
           hasil = round2(rawHasil);
           susutKg = round2(baku - hasil);
         } else if (
@@ -631,8 +776,6 @@ export async function fetchDhpKrosokRecords(
           susutKg = 0;
         }
 
-        const susutPct = hasil > 0 && baku > 0 ? round2((susutKg / baku) * 100) : 0;
-
         const tembakauStr = String(rawTembakau).trim();
         const jalurProses: 'SKT' | 'SKM' = tembakauStr.toUpperCase().includes('SKM')
           ? 'SKM'
@@ -647,8 +790,9 @@ export async function fetchDhpKrosokRecords(
           stockCodeByVariant.get(tembakauStr.toLowerCase()) ||
           stockCodeByVariant.get(cleanVariantLookup);
 
-        // Check if matched in rekap records
+        // 1-to-1 Match against permanent Buku Besar Rekap (consumes matched srcRow)
         const match = rekapRecords.find((r) => {
+          if (r.srcRow && consumedRekapRows.has(r.srcRow)) return false;
           const dateMatch = r.tanggal === parsedDate.iso;
           const tembakauMatch =
             r.jenisKrosok.toLowerCase() === tembakauStr.toLowerCase() ||
@@ -659,9 +803,50 @@ export async function fetchDhpKrosokRecords(
           return dateMatch && tembakauMatch && bakuMatch;
         });
 
+        if (match?.srcRow) {
+          consumedRekapRows.add(match.srcRow);
+        }
+
+        // Layer 2 — Sanity Check & Physics Boundary on raw DHP values BEFORE fallback
+        const rawPhysicsCheck = validateKrosokPhysics({
+          baku,
+          hasil,
+          gagangKg,
+          airKg,
+          debuKg
+        });
+
+        let isRestoredFromRekap = false;
+
+        // Safeguard 3 — Midnight Rollover (00:00 WIB) Visual Fallback:
+        // Saat rumus =TODAY() di Sheet DHP berganti hari sehingga Kolom I menjadi FALSE (hasil === 0),
+        // padahal batch tersebut SUDAH terverifikasi final (match.hasil > 0) di Buku Besar Rekap,
+        // pulihkan tampilan bobot terverifikasi dari Rekap agar tidak tampak "0,0 (Proses)" palsu!
+        if (hasil <= 0 && match && match.hasil > 0 && rawPhysicsCheck.valid) {
+          hasil = round2(match.hasil);
+          susutKg = round2(baku - hasil);
+          if (gagangKg === 0 && match.gagangKg > 0) gagangKg = match.gagangKg;
+          if (airKg === 0 && match.airKg > 0) airKg = match.airKg;
+          if (debuKg === 0 && match.debuKg > 0) debuKg = match.debuKg;
+          isRestoredFromRekap = true;
+        }
+
+        const susutPct = hasil > 0 && baku > 0 ? round2((susutKg / baku) * 100) : 0;
+
+        // Re-verify final physics state; quarantine any anomalous DHP input from updating Rekap
+        const finalPhysicsCheck = rawPhysicsCheck.valid
+          ? validateKrosokPhysics({ baku, hasil, gagangKg, airKg, debuKg })
+          : rawPhysicsCheck;
+        const isPhysicsAnomaly = !finalPhysicsCheck.valid;
+
         const isMatched = Boolean(match);
+        // Layer 1 & Layer 2 Guard: Never flag needsUpdate if restored from Rekap, hasil <= 0, or physics anomaly!
         const needsUpdate = Boolean(
-          match && hasil > 0 && Math.abs(match.hasil - hasil) >= 0.5
+          match &&
+            !isRestoredFromRekap &&
+            !isPhysicsAnomaly &&
+            hasil > 0 &&
+            Math.abs(match.hasil - hasil) >= 0.5
         );
 
         items.push({
@@ -686,7 +871,10 @@ export async function fetchDhpKrosokRecords(
           isMatchedInRekap: isMatched,
           matchedRow: match?.srcRow,
           needsUpdateInRekap: needsUpdate,
-          rekapHasil: match?.hasil
+          rekapHasil: match?.hasil,
+          isRestoredFromRekap,
+          isPhysicsAnomaly,
+          physicsAnomalyReason: finalPhysicsCheck.reason
         });
       }
     }

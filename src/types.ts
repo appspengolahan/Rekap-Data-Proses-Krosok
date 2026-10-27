@@ -110,6 +110,9 @@ export interface DhpKrosokItem {
   matchedRow?: number;
   needsUpdateInRekap?: boolean;
   rekapHasil?: number;
+  isRestoredFromRekap?: boolean;
+  isPhysicsAnomaly?: boolean;
+  physicsAnomalyReason?: string;
 }
 
 export interface RekapRawDateRow {

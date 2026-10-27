@@ -23,7 +23,8 @@ import {
   fetchDhpKrosokRecords,
   getCachedDhpItems,
   setCachedDhpItems,
-  buildDashboardData
+  buildDashboardData,
+  validateKrosokPhysics
 } from './services/dataService';
 import {
   calculateBaselineFromPeriod,
@@ -193,9 +194,20 @@ export default function App() {
     localStorage.setItem('krosok_sidebar_collapsed_v1', String(next));
   };
 
-  // Append new records from DHP into local Rekap data (strictly hasil > 0)
+  // Append new records from DHP into local Rekap data (strictly hasil > 0 & physics-verified)
   const handleAppendRecordsToRekap = (newRecords: KrosokRecord[]) => {
-    const validNew = newRecords.filter((nr) => nr.baku > 0 && nr.hasil > 0);
+    const validNew = newRecords.filter(
+      (nr) =>
+        nr.baku > 0 &&
+        nr.hasil > 0 &&
+        validateKrosokPhysics({
+          baku: nr.baku,
+          hasil: nr.hasil,
+          gagangKg: nr.gagangKg,
+          airKg: nr.airKg,
+          debuKg: nr.debuKg
+        }).valid
+    );
     setRecords((prev) => {
       const updatedList = [...prev];
       for (const nr of validNew) {
@@ -206,6 +218,8 @@ export default function App() {
             Math.abs(r.baku - nr.baku) < 0.5
         );
         if (matchIdx >= 0) {
+          // Layer 1 Non-Destructive Guard: never overwrite > 0 with <= 0
+          if (nr.hasil <= 0) continue;
           updatedList[matchIdx] = { ...updatedList[matchIdx], ...nr };
         } else {
           updatedList.push(nr);
@@ -217,7 +231,7 @@ export default function App() {
 
     setDhpItems((prev) =>
       prev.map((item) =>
-        item.hasil > 0
+        item.hasil > 0 && !item.isPhysicsAnomaly
           ? {
               ...item,
               isMatchedInRekap: true,

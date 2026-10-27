@@ -93,81 +93,130 @@ export const GasCenterModal: React.FC<GasCenterModalProps> = ({
     }
   };
 
-  // Google Apps Script REST snippet for user copy-paste
+  // Google Apps Script REST snippet for user copy-paste (Hardened with 4-Layer Defense)
   const gasHeadlessScriptSnippet = `/**
- * HEADLESS REST API GOOGLE APPS SCRIPT
+ * HEADLESS REST API GOOGLE APPS SCRIPT (4-LAYER DEFENSE)
  * Untuk Web App Monitoring Rekap Proses Krosok
  * Deploy sebagai: Web App -> Execute as: Me -> Who has access: Anyone
  */
 
-function doGet(e) {
-  var action = (e && e.parameter && e.parameter.action) || 'readAll';
-  var ss = SpreadsheetApp.openById('${formData.spreadsheetId}');
-  var sheet = ss.getSheetByName('${formData.sheetName}');
-  
-  if (!sheet) {
-    return ContentService.createTextOutput(JSON.stringify({
-      error: 'Sheet ${formData.sheetName} tidak ditemukan'
-    })).setMimeType(ContentService.MimeType.JSON);
-  }
-
-  // Baris data mulai baris 12 (Header di baris 10)
-  var lastRow = sheet.getLastRow();
-  if (lastRow < 12) {
-    return ContentService.createTextOutput(JSON.stringify([])).setMimeType(ContentService.MimeType.JSON);
-  }
-
-  var values = sheet.getRange(12, 1, lastRow - 11, 14).getValues();
-  var records = [];
-
-  for (var i = 0; i < values.length; i++) {
-    var r = values[i];
-    var tgl = r[1]; // B: TANGGAL PROSES
-    var baku = r[7]; // H: BAKU
-    var hasil = r[8]; // I: HASIL
-
-    if (tgl && typeof baku === 'number' && typeof hasil === 'number' && baku > 0) {
-      var isoDate = (tgl instanceof Date) ? Utilities.formatDate(tgl, Session.getScriptTimeZone(), 'yyyy-MM-dd') : String(tgl);
-      var susutKg = typeof r[9] === 'number' ? r[9] : (baku - hasil);
-      var susutPct = typeof r[10] === 'number' ? r[10] : (susutKg / baku * 100);
-      var gagangKg = typeof r[11] === 'number' ? r[11] : 0;
-      var airKg = typeof r[12] === 'number' ? r[12] : 0;
-      var debuKg = typeof r[13] === 'number' ? r[13] : 0;
-
-      records.push({
-        srcRow: 12 + i,
-        tanggal: isoDate,
-        bulan: String(r[2]),
-        tahun: String(r[3]),
-        jenisKrosok: String(r[5]),
-        jenisProses: String(r[6] || 'SKT'),
-        baku: baku,
-        hasil: hasil,
-        susutKg: susutKg,
-        susutPct: susutPct,
-        gagangKg: gagangKg,
-        debuAirKg: airKg + debuKg
-      });
+function findActualLastRow_(sheet) {
+  var max = sheet.getLastRow();
+  if (max < 12) return 11;
+  var colB = sheet.getRange(12, 2, max - 11, 1).getValues();
+  for (var idx = colB.length - 1; idx >= 0; idx--) {
+    var v = colB[idx][0];
+    if (v instanceof Date || (typeof v === 'string' && v.trim() !== '')) {
+      return 12 + idx;
     }
   }
+  return 11;
+}
 
-  return ContentService.createTextOutput(JSON.stringify({
-    status: 'ok',
-    total: records.length,
-    records: records
-  })).setMimeType(ContentService.MimeType.JSON);
+function validasiFisikaKrosok_(baku, hasil, gagang, air, debu) {
+  if (debu < 0 || gagang < 0 || air < 0) return false;
+  if (hasil > 0 && baku > 0) {
+    var susutPct = ((baku - hasil) / baku) * 100;
+    if (susutPct > 35 || susutPct < -15) return false;
+  }
+  return true;
+}
+
+function doGet(e) {
+  try {
+    var ss = SpreadsheetApp.openById('${formData.spreadsheetId}');
+    var sheet = ss.getSheetByName('${formData.sheetName}');
+
+    if (!sheet) {
+      return ContentService.createTextOutput(JSON.stringify({
+        success: false,
+        error: 'Sheet ${formData.sheetName} tidak ditemukan',
+        records: []
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // Optimasi Kecepatan: Baca hanya sampai baris aktual ber-tanggal (abaikan >1.000 baris rumus kosong)
+    var lastRow = findActualLastRow_(sheet);
+    if (lastRow < 12) {
+      return ContentService.createTextOutput(JSON.stringify({
+        status: 'ok',
+        total: 0,
+        records: []
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    var values = sheet.getRange(12, 1, lastRow - 11, 14).getValues();
+    var records = [];
+
+    for (var i = 0; i < values.length; i++) {
+      var r = values[i];
+      var tgl = r[1]; // B: TANGGAL PROSES
+      var baku = r[7]; // H: BAKU
+      var hasil = r[8]; // I: HASIL
+
+      if (tgl && typeof baku === 'number' && typeof hasil === 'number' && baku > 0 && hasil > 0) {
+        var isoDate = (tgl instanceof Date) ? Utilities.formatDate(tgl, Session.getScriptTimeZone(), 'yyyy-MM-dd') : String(tgl);
+        var susutKg = typeof r[9] === 'number' ? r[9] : (baku - hasil);
+        var susutPct = typeof r[10] === 'number' ? r[10] : (susutKg / baku * 100);
+        var gagangKg = typeof r[11] === 'number' ? r[11] : 0;
+        var airKg = typeof r[12] === 'number' ? r[12] : 0;
+        var debuKg = typeof r[13] === 'number' ? r[13] : 0;
+
+        records.push({
+          srcRow: 12 + i,
+          tanggal: isoDate,
+          bulan: String(r[2]),
+          tahun: String(r[3]),
+          jenisKrosok: String(r[5]),
+          jenisProses: String(r[6] || 'SKT'),
+          baku: baku,
+          hasil: hasil,
+          susutKg: susutKg,
+          susutPct: susutPct,
+          gagangKg: gagangKg,
+          airKg: airKg,
+          debuKg: debuKg,
+          debuAirKg: airKg + debuKg
+        });
+      }
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({
+      status: 'ok',
+      total: records.length,
+      records: records
+    })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: String((err && err.message) || err || 'Unhandled doGet Exception'),
+      records: []
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
 }
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
-  lock.tryLock(15000);
+  if (!lock.tryLock(15000)) {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: 'Proses sinkronisasi lain sedang berjalan, silakan coba sesaat lagi.'
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
   try {
-    var data = JSON.parse(e.postData.contents);
+    var data = e && e.postData && e.postData.contents ? JSON.parse(e.postData.contents) : {};
     var action = data.action || 'singleAppend';
 
     // Jika IntegrasiDHP.gs terpasang pada project yang sama, delegasikan rekonsiliasi 2 arah secara presisi
     if ((action === 'reconcileActiveDate' || action === 'appendDhpRecords') && typeof syncDhpToRekap === 'function') {
-      var syncRes = syncDhpToRekap({ activeDateHint: data.activeIsoDate || '' });
+      var syncRes = syncDhpToRekap({
+        mode: action === 'reconcileActiveDate' ? 'reconcile' : 'sync',
+        activeDateHint: data.activeIsoDate || ''
+      });
+      if (syncRes && syncRes.error) {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, error: syncRes.error, result: syncRes }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
       return ContentService.createTextOutput(JSON.stringify({ success: true, result: syncRes }))
         .setMimeType(ContentService.MimeType.JSON);
     }
@@ -179,7 +228,7 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
 
-    // Rekonsiliasi Tanggal Aktif Mandiri (Bottom-Up Reverse Scan + Fail-Safe Hasil === 0)
+    // Rekonsiliasi Tanggal Aktif Mandiri (Bottom-Up Reverse Scan + Fail-Safe Hasil === 0 + Fast Row Bound)
     if (action === 'reconcileActiveDate' && data.activeIsoDate) {
       var dhpSS = SpreadsheetApp.openById('${formData.dhpSpreadsheetId || '1tyE6QWZOPhjLCsjvesU82QePF5RqEBToJsp1m0qQY_w'}');
       var dhpSh = dhpSS.getSheetByName('${formData.dhpSheetName || 'INTEGRASI DATA'}');
@@ -200,7 +249,7 @@ function doPost(e) {
         }
       }
 
-      var maxR = sheet.getLastRow();
+      var maxR = findActualLastRow_(sheet);
       var purged = 0;
       if (maxR >= 12) {
         var rVals = sheet.getRange(12, 2, maxR - 11, 8).getValues();
@@ -233,7 +282,7 @@ function doPost(e) {
           var cItem = candidates[k];
           if (cItem.rHasil > 0) continue; // Fail-Safe: Hasil > 0 tidak pernah dihapus
           if (!cItem.matched) {
-            if (cItem.rowNum === 12 && sheet.getLastRow() <= 12) {
+            if (cItem.rowNum === 12 && findActualLastRow_(sheet) <= 12) {
               sheet.getRange(12, 2).clearContent();
               sheet.getRange(12, 6, 1, 4).clearContent();
               sheet.getRange(12, 12, 1, 3).clearContent();
@@ -248,22 +297,36 @@ function doPost(e) {
         .setMimeType(ContentService.MimeType.JSON);
     }
 
-    // Input baris baru dengan proteksi penuh formula Kolom C, D, E, J, K
+    // Input baris baru dengan Layer 1 (Hasil > 0), Layer 2 (Batas Fisika), & Proteksi Formula C, D, E, J, K
     var items = Array.isArray(data.records) ? data.records : [data];
-    var lastRow = sheet.getLastRow();
+    var lastRow = findActualLastRow_(sheet);
     var targetRow = Math.max(11, lastRow);
+    var quarantined = 0;
+
     for (var idx = 0; idx < items.length; idx++) {
       var rec = items[idx];
-      if (!rec.baku || Number(rec.hasil) <= 0) continue;
+      var nBaku = Number(rec.baku) || 0;
+      var nHasil = Number(rec.hasil) || 0;
+      var nGagang = Number(rec.gagangKg) || 0;
+      var nAir = Number(rec.airKg) || 0;
+      var nDebu = Number(rec.debuKg) || 0;
+
+      // Layer 1 & Layer 2 Guard
+      if (nBaku <= 0 || nHasil <= 0) continue;
+      if (!validasiFisikaKrosok_(nBaku, nHasil, nGagang, nAir, nDebu)) {
+        quarantined++;
+        continue;
+      }
+
       targetRow++;
       sheet.getRange(targetRow, 2).setValue(new Date(rec.tanggal));
       sheet.getRange(targetRow, 6).setValue(rec.jenisKrosok);
       sheet.getRange(targetRow, 7).setValue(rec.jenisProses || 'SKT');
-      sheet.getRange(targetRow, 8).setValue(Number(rec.baku));
-      sheet.getRange(targetRow, 9).setValue(Number(rec.hasil));
-      sheet.getRange(targetRow, 12).setValue(Number(rec.gagangKg) || 0);
-      sheet.getRange(targetRow, 13).setValue(Number(rec.airKg) || 0);
-      sheet.getRange(targetRow, 14).setValue(Number(rec.debuKg) || 0);
+      sheet.getRange(targetRow, 8).setValue(nBaku);
+      sheet.getRange(targetRow, 9).setValue(nHasil);
+      sheet.getRange(targetRow, 12).setValue(nGagang);
+      sheet.getRange(targetRow, 13).setValue(nAir);
+      sheet.getRange(targetRow, 14).setValue(nDebu);
 
       if (targetRow > 12) {
         if (!sheet.getRange(targetRow, 3).getFormula()) {
@@ -283,11 +346,13 @@ function doPost(e) {
       }
     }
 
-    return ContentService.createTextOutput(JSON.stringify({ success: true }))
+    return ContentService.createTextOutput(JSON.stringify({ success: true, quarantined: quarantined }))
       .setMimeType(ContentService.MimeType.JSON);
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ success: false, error: err.message }))
-      .setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({
+      success: false,
+      error: String((err && err.message) || err || 'Unhandled doPost Exception')
+    })).setMimeType(ContentService.MimeType.JSON);
   } finally {
     try { lock.releaseLock(); } catch (e) {}
   }

@@ -524,6 +524,46 @@ export function evaluateDhpBatch(
 
   const weatherAtBatch = getBatchHourlyWeather(weatherData, item.tanggal, item.waktu);
 
+  if (item.isPhysicsAnomaly) {
+    const baku = item.baku || 0;
+    const susutKg = item.hasil > 0 ? round2(baku - item.hasil) : 0;
+    const susutPct = item.hasil > 0 && baku > 0 ? round2((susutKg / baku) * 100) : 0;
+    const gagangKg = round2(item.gagangKg || 0);
+    const debuKg = round2(item.debuKg || 0);
+    const uapAirKg = item.hasil > 0 ? round2(susutKg - (gagangKg + debuKg)) : 0;
+    return {
+      batchKey,
+      status: 'oos',
+      acuanPct: standar.standarSusutPct,
+      toleransiWaspadaPct: standar.toleransiWaspadaPct,
+      toleransiOosPct: standar.toleransiOosPct,
+      periodeAcuan: standar.periodeAcuan,
+      deviasiPct: item.hasil > 0 ? round2(susutPct - standar.standarSusutPct) : 0,
+      dampakKg:
+        item.hasil > 0
+          ? round2(((susutPct - standar.standarSusutPct) / 100) * baku)
+          : 0,
+      gagangKg,
+      gagangPct: baku > 0 ? round2((gagangKg / baku) * 100) : 0,
+      debuKg,
+      debuPct: baku > 0 ? round2((debuKg / baku) * 100) : 0,
+      uapAirKg,
+      uapAirPct: baku > 0 ? round2((uapAirKg / baku) * 100) : 0,
+      isSmallBatch:
+        baku > 0 &&
+        standar.avgBatchBakuKg > 350 &&
+        baku < standar.avgBatchBakuKg * 0.45,
+      avgBatchRefKg: standar.avgBatchBakuKg || 0,
+      weatherAtBatch,
+      tags,
+      catatan,
+      diagnosaUtama: 'Anomali Neraca Massa (Dikarantina)',
+      penjelasanKilat:
+        item.physicsAnomalyReason ||
+        'Input melanggar batas fisika materi tembakau dan dikarantina otomatis agar tidak merusak Buku Besar Rekap.'
+    };
+  }
+
   if (!item.hasil || item.hasil <= 0) {
     return {
       batchKey,
