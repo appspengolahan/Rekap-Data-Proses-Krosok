@@ -22,7 +22,10 @@ export const QuickTabNav: React.FC<QuickTabNavProps> = ({
   onTabChange,
   currentRole
 }) => {
-  const canAddEntry = currentRole === 'Admin' || currentRole === 'Site Engineer';
+  const canAddEntry =
+    currentRole === 'Admin' ||
+    currentRole === 'Site Engineer' ||
+    currentRole === 'Developer / Engineer';
 
   const items = [
     { id: 'overview' as NavTab, label: 'Ringkasan', icon: BarChart3 },

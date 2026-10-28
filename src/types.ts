@@ -1,4 +1,10 @@
-export type UserRole = 'Project Manager' | 'Site Engineer' | 'Vendor' | 'Client' | 'Admin';
+export type UserRole =
+  | 'Project Manager'
+  | 'Developer / Engineer'
+  | 'Site Engineer'
+  | 'Vendor'
+  | 'Client'
+  | 'Admin';
 
 export interface KrosokRecord {
   srcRow: number;

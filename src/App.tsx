@@ -54,6 +54,7 @@ import { GasCenterModal } from './components/GasCenterModal';
 import { ModalDhpIntegrasi } from './components/ModalDhpIntegrasi';
 import { NewEntryModal } from './components/NewEntryModal';
 import { HelpModal } from './components/HelpModal';
+import { DeveloperBlueprintModal } from './components/DeveloperBlueprintModal';
 
 export default function App() {
   // 1. Initial State from Cache (Loads in 0.01s)
@@ -88,6 +89,7 @@ export default function App() {
   const [isDhpModalOpen, setIsDhpModalOpen] = useState(false);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isNewEntryOpen, setIsNewEntryOpen] = useState(false);
+  const [isDevBlueprintOpen, setIsDevBlueprintOpen] = useState(false);
 
   // DHP Krosok Items State
   const [dhpItems, setDhpItems] = useState<DhpKrosokItem[]>(() => getCachedDhpItems());
@@ -424,6 +426,7 @@ export default function App() {
         onOpenSwitchAppTab={() => setActiveTab('switch_app')}
         onOpenDhpIntegrasi={() => setIsDhpModalOpen(true)}
         dhpCount={dhpItems.length}
+        onOpenDevBlueprint={() => setIsDevBlueprintOpen(true)}
       />
 
       <div className="flex-1 flex w-full min-h-0 overflow-hidden">
@@ -447,6 +450,7 @@ export default function App() {
           isOpenMobile={mobileMenuOpen}
           onCloseMobile={() => setMobileMenuOpen(false)}
           switchAppsCount={switchApps.length}
+          onOpenDevBlueprint={() => setIsDevBlueprintOpen(true)}
         />
 
         {/* Main Content Area (Independent scroll) */}
@@ -642,6 +646,11 @@ export default function App() {
       />
 
       <HelpModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
+
+      <DeveloperBlueprintModal
+        isOpen={isDevBlueprintOpen}
+        onClose={() => setIsDevBlueprintOpen(false)}
+      />
     </div>
   );
 }

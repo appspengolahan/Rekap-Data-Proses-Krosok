@@ -7,7 +7,8 @@ import {
   Database,
   Shield,
   Menu,
-  Zap
+  Zap,
+  BookOpen
 } from 'lucide-react';
 import { UserRole, SyncStatus, SwitchAppModule } from '../types';
 
@@ -29,6 +30,7 @@ interface HeaderProps {
   onExportPdf?: () => void;
   switchApps: SwitchAppModule[];
   onOpenSwitchAppTab: () => void;
+  onOpenDevBlueprint?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -46,7 +48,8 @@ export const Header: React.FC<HeaderProps> = ({
   switchApps,
   onOpenSwitchAppTab,
   onOpenDhpIntegrasi,
-  dhpCount
+  dhpCount,
+  onOpenDevBlueprint
 }) => {
   const [switchOpen, setSwitchOpen] = useState(false);
   const [roleOpen, setRoleOpen] = useState(false);
@@ -68,11 +71,16 @@ export const Header: React.FC<HeaderProps> = ({
 
   const roles: UserRole[] = [
     'Project Manager',
+    'Developer / Engineer',
     'Site Engineer',
     'Vendor',
     'Client',
     'Admin'
   ];
+  const isDeveloperView =
+    currentRole === 'Developer / Engineer' ||
+    currentRole === 'Site Engineer' ||
+    currentRole === 'Admin';
 
   return (
     <header className="no-print sticky top-0 z-40 bg-[#0b1329] text-white border-b border-slate-800/80 px-4 py-2.5 sm:px-6 shadow-md">
@@ -146,7 +154,7 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             {roleOpen && (
-              <div className="absolute right-0 mt-1.5 w-52 bg-slate-900 text-white rounded-xl shadow-2xl border border-slate-800 py-1.5 z-50 animate-in fade-in slide-in-from-top-1">
+              <div className="absolute right-0 mt-1.5 w-60 bg-slate-900 text-white rounded-xl shadow-2xl border border-slate-800 py-1.5 z-50 animate-in fade-in slide-in-from-top-1">
                 <div className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
                   Pilih Role Pengguna (RBAC)
                 </div>
@@ -157,7 +165,7 @@ export const Header: React.FC<HeaderProps> = ({
                       onRoleChange(role);
                       setRoleOpen(false);
                     }}
-                    className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left transition-colors ${
+                    className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left transition-colors cursor-pointer ${
                       currentRole === role
                         ? 'bg-blue-600 text-white font-bold'
                         : 'text-slate-300 hover:bg-slate-800'
@@ -169,6 +177,29 @@ export const Header: React.FC<HeaderProps> = ({
                     )}
                   </button>
                 ))}
+
+                {onOpenDevBlueprint && (
+                  <div className="mt-1.5 pt-1.5 px-2 border-t border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (
+                          currentRole !== 'Developer / Engineer' &&
+                          currentRole !== 'Site Engineer' &&
+                          currentRole !== 'Admin'
+                        ) {
+                          onRoleChange('Developer / Engineer');
+                        }
+                        setRoleOpen(false);
+                        onOpenDevBlueprint();
+                      }}
+                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-semibold text-sky-300 hover:text-white bg-sky-950/50 hover:bg-sky-800/60 border border-sky-800/50 transition-colors cursor-pointer"
+                    >
+                      <BookOpen className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                      <span>Panduan Arsitektur (PDF)</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -177,7 +208,7 @@ export const Header: React.FC<HeaderProps> = ({
           {onOpenDhpIntegrasi && (
             <button
               onClick={onOpenDhpIntegrasi}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-amber-200 bg-amber-950/60 hover:bg-amber-900/60 border border-amber-700/60 transition-all shadow-xs"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-amber-200 bg-amber-950/60 hover:bg-amber-900/60 border border-amber-700/60 transition-all shadow-xs cursor-pointer"
               title="Integrasi & Sinkronisasi DHP Krosok"
             >
               <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400/20" />
@@ -190,10 +221,23 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
+          {/* Developer / Engineer Architecture Blueprint & PDF Trigger */}
+          {isDeveloperView && onOpenDevBlueprint && (
+            <button
+              type="button"
+              onClick={onOpenDevBlueprint}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-sky-200 bg-sky-950/60 hover:bg-sky-900/60 border border-sky-700/60 transition-colors shadow-xs cursor-pointer"
+              title="Panduan Struktur, Kode & Pengamanan Integrasi DHP -> Rekap (Unduh PDF)"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-sky-400" />
+              <span className="hidden lg:inline">Blueprint (PDF)</span>
+            </button>
+          )}
+
           {/* Headless GAS Center Trigger */}
           <button
             onClick={onOpenGasCenter}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors cursor-pointer"
             title="Pengaturan Headless GAS REST API"
           >
             <Database className="w-3.5 h-3.5 text-indigo-400" />

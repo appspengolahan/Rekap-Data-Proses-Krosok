@@ -12,7 +12,8 @@ import {
   ShieldCheck,
   AppWindow,
   Zap,
-  Scale
+  Scale,
+  BookOpen
 } from 'lucide-react';
 import { UserRole } from '../types';
 
@@ -38,6 +39,7 @@ interface SidebarProps {
   isOpenMobile: boolean;
   onCloseMobile: () => void;
   switchAppsCount?: number;
+  onOpenDevBlueprint?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -52,9 +54,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenHelp,
   isOpenMobile,
   onCloseMobile,
-  switchAppsCount
+  switchAppsCount,
+  onOpenDevBlueprint
 }) => {
-  const canAddEntry = currentRole === 'Admin' || currentRole === 'Site Engineer';
+  const canAddEntry =
+    currentRole === 'Admin' ||
+    currentRole === 'Site Engineer' ||
+    currentRole === 'Developer / Engineer';
+  const canAccessDevBlueprint =
+    currentRole === 'Developer / Engineer' ||
+    currentRole === 'Site Engineer' ||
+    currentRole === 'Admin';
 
   const navItems = [
     {
@@ -271,6 +281,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
             )}
 
+            {canAccessDevBlueprint && onOpenDevBlueprint && (
+              <button
+                type="button"
+                onClick={() => {
+                  onOpenDevBlueprint();
+                  onCloseMobile();
+                }}
+                title={collapsed ? 'Blueprint Arsitektur (PDF)' : undefined}
+                className={`flex items-center transition-colors cursor-pointer ${
+                  collapsed
+                    ? 'w-11 h-11 mx-auto rounded-xl justify-center text-sky-300 hover:text-white hover:bg-sky-950/60'
+                    : 'w-full gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold text-sky-300 hover:text-white hover:bg-sky-950/60 border border-sky-800/40'
+                }`}
+              >
+                <BookOpen className="w-5 h-5 text-sky-400 shrink-0" />
+                {!collapsed && (
+                  <div className="text-left flex-1 min-w-0">
+                    <div className="truncate">Blueprint Arsitektur (PDF)</div>
+                    <div className="text-[10px] text-sky-400/80 font-normal truncate">
+                      Panduan Replikasi &amp; Pengaman
+                    </div>
+                  </div>
+                )}
+              </button>
+            )}
+
             <button
               onClick={() => {
                 onOpenGasCenter();
@@ -325,6 +361,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
               <div className="text-[10px] text-slate-400 mt-1">
                 {currentRole === 'Admin' && 'Akses Penuh + Edit Script'}
+                {currentRole === 'Developer / Engineer' &&
+                  'Blueprint PDF, Arsitektur & Integrasi GAS'}
                 {currentRole === 'Site Engineer' && 'Akses Teknik & Entri Data'}
                 {currentRole === 'Project Manager' && 'Monitoring KPI & Target'}
                 {currentRole === 'Vendor' && 'Pelacakan Pengiriman Lot'}
