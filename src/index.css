@@ -3,10 +3,33 @@
 @theme {
   --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-dhp: "Public Sans", Arial, Helvetica, sans-serif;
 }
 
 .font-mono {
   font-variant-numeric: tabular-nums;
+}
+
+/* Scoped High-Legibility Open-Zero Typography for Menu Integrasi DHP */
+.dhp-integrasi-typography,
+.dhp-integrasi-typography .font-sans {
+  font-family: var(--font-dhp);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.dhp-integrasi-typography .font-mono:not(pre):not(code):not(.dhp-code-viewer),
+.dhp-integrasi-typography .tabular-nums {
+  font-family: var(--font-dhp);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1, "zero" 0;
+  letter-spacing: 0.01em;
+}
+
+.dhp-integrasi-typography .dhp-code-viewer,
+.dhp-integrasi-typography pre,
+.dhp-integrasi-typography code {
+  font-family: var(--font-mono);
 }
 
 .official-pdf-only {

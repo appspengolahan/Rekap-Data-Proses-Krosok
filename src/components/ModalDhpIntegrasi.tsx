@@ -1068,7 +1068,7 @@ function doPost(e) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-1 sm:p-1.5 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
+    <div className="dhp-integrasi-typography fixed inset-0 z-50 flex items-center justify-center p-1 sm:p-1.5 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
       <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-slate-200 w-full max-w-[98vw] 2xl:max-w-[1800px] overflow-hidden flex flex-col max-h-[98dvh] sm:max-h-[98vh]">
         {/* Header - Wide Single-Row on Desktop with Live Sheet Route */}
         <div className="px-3.5 sm:px-5 py-1.5 sm:py-2 border-b border-slate-800 flex items-center justify-between gap-2 sm:gap-3 bg-gradient-to-r from-slate-900 via-slate-850 to-indigo-950 text-white shrink-0">
@@ -2163,7 +2163,7 @@ function doPost(e) {
                                       {item.hasil > 0 ? `${formatPct(item.susutPct)}%` : '-'}
                                     </span>
                                     {evalItem && (
-                                      <span className="text-[10px] text-slate-400 font-normal mt-0.5 leading-tight">
+                                      <span className="text-[10.5px] text-slate-500 font-normal mt-0.5 leading-tight">
                                         (Acuan {formatPct(evalItem.acuanPct)}%)
                                       </span>
                                     )}
@@ -2248,7 +2248,7 @@ function doPost(e) {
                                           : 'Normal'}
                                       </span>
                                       {evalItem.status !== 'proses' && (
-                                        <span className="font-mono text-[9.5px] font-semibold opacity-90">
+                                        <span className="font-mono text-[10.5px] font-semibold">
                                           {evalItem.deviasiPct >= 0 ? '+' : ''}
                                           {formatPct(evalItem.deviasiPct)}%
                                         </span>
@@ -2954,7 +2954,7 @@ function doPost(e) {
                 </div>
               </div>
 
-              <div className="bg-slate-950 rounded-xl p-4 overflow-x-auto text-slate-200 font-mono text-[11px] leading-relaxed max-h-96 border border-slate-800">
+              <div className="dhp-code-viewer bg-slate-950 rounded-xl p-4 overflow-x-auto text-slate-200 font-mono text-[11px] leading-relaxed max-h-96 border border-slate-800">
                 <pre>{appsScriptCode}</pre>
               </div>
             </div>
