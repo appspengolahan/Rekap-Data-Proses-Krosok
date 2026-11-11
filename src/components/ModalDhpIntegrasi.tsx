@@ -48,6 +48,7 @@ import {
   formatPct,
   getDhpActiveSheetDateLabel,
   getDhpActiveSheetIsoDate,
+  postToGASWithFallback,
   round2,
   safeParseJsonResponse,
   validateKrosokPhysics
@@ -313,26 +314,20 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
       } | null = null;
       let gasStreamNotice: string | null = null;
 
-      if (config.gasUrl && config.gasUrl.startsWith('http')) {
+      if (config.gasUrl) {
         try {
-          const postRes = await fetch(config.gasUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({
-              action: 'reconcileActiveDate',
-              activeIsoDate
-            }),
-            redirect: 'follow'
+          const res = await postToGASWithFallback(config.gasUrl, {
+            action: 'reconcileActiveDate',
+            activeIsoDate
           });
-          const parsedRes = await safeParseJsonResponse<any>(postRes);
-          if (parsedRes.data) {
-            if (parsedRes.data.success === false && parsedRes.data.error) {
-              gasStreamNotice = String(parsedRes.data.error);
-            } else if (parsedRes.data.result) {
-              gasSummaryResult = parsedRes.data.result;
+          if (res.data) {
+            if (res.data.success === false && res.data.error) {
+              gasStreamNotice = String(res.data.error);
+            } else if (res.data.result) {
+              gasSummaryResult = res.data.result;
             }
-          } else if (parsedRes.parseError) {
-            gasStreamNotice = parsedRes.parseError;
+          } else if (res.error) {
+            gasStreamNotice = res.error;
           }
         } catch (e) {
           console.warn('Network notice during GAS reconciliation post:', e);
@@ -476,30 +471,24 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
         };
       });
 
-      // Send to GAS (runs 4-Layer Protected Sync + Safe Stream JSON Parsing)
+      // Send to GAS (runs 4-Layer Protected Sync + Safe Stream JSON Parsing + Cloudflare HTML Proxy Fallback)
       let gasSyncSummary: string | null = null;
       let gasSyncError: string | null = null;
-      if (config.gasUrl && config.gasUrl.startsWith('http')) {
+      if (config.gasUrl) {
         try {
-          const postRes = await fetch(config.gasUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({
-              action: 'appendDhpRecords',
-              activeIsoDate,
-              records: convertedRecords
-            }),
-            redirect: 'follow'
+          const res = await postToGASWithFallback(config.gasUrl, {
+            action: 'appendDhpRecords',
+            activeIsoDate,
+            records: convertedRecords
           });
-          const parsedRes = await safeParseJsonResponse<any>(postRes);
-          if (parsedRes.data) {
-            if (parsedRes.data.success === false && parsedRes.data.error) {
-              gasSyncError = String(parsedRes.data.error);
-            } else if (parsedRes.data.result?.summary) {
-              gasSyncSummary = parsedRes.data.result.summary;
+          if (res.data) {
+            if (res.data.success === false && res.data.error) {
+              gasSyncError = String(res.data.error);
+            } else if (res.data.result?.summary) {
+              gasSyncSummary = res.data.result.summary;
             }
-          } else if (parsedRes.parseError) {
-            gasSyncError = parsedRes.parseError;
+          } else if (res.error) {
+            gasSyncError = res.error;
           }
         } catch (e) {
           console.warn('Network notice during GAS post:', e);

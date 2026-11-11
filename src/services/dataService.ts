@@ -44,8 +44,8 @@ export function loadConfig(): GASConfig {
     const saved = localStorage.getItem(STORAGE_KEYS.CONFIG);
     if (saved) {
       const parsed = JSON.parse(saved);
-      // Automatically migrate to new standalone URL if user has older URL in localStorage
-      if (!parsed.gasUrl || parsed.gasUrl.includes('AKfycbxe') || parsed.gasUrl.includes('AKfycbw')) {
+      // Automatically migrate to new standalone URL if user has older or relative /api proxy URL in localStorage
+      if (!parsed.gasUrl || parsed.gasUrl.startsWith('/api') || parsed.gasUrl.startsWith('/') || parsed.gasUrl.includes('AKfycbxe') || parsed.gasUrl.includes('AKfycbw')) {
         parsed.gasUrl = DEFAULT_CONFIG.gasUrl;
       }
       return {
@@ -353,15 +353,30 @@ export function validateKrosokPhysics(params: {
   return { valid: true };
 }
 
+export function isHtmlResponse(rawText: string, contentType?: string | null): boolean {
+  if (contentType && (contentType.includes('text/html') || contentType.includes('application/xhtml+xml'))) {
+    return true;
+  }
+  const sample = rawText.trim().slice(0, 150).toLowerCase();
+  return (
+    sample.startsWith('<!doctype') ||
+    sample.startsWith('<html') ||
+    sample.startsWith('<head') ||
+    sample.startsWith('<body')
+  );
+}
+
 /**
  * Layer 4 — Resilient Stream & JSON Parser:
  * Membaca payload via response.text() terlebih dahulu agar stream terpotong / timeout GAS
  * tidak pernah memicu unhandled exception "Unexpected end of JSON input".
+ * Juga mendeteksi dokumen HTML (misal dari Cloudflare SPA routing pada rute /api proxy).
  */
 export async function safeParseJsonResponse<T = any>(
   response: Response
-): Promise<{ ok: boolean; data: T | null; rawText: string; parseError?: string }> {
+): Promise<{ ok: boolean; data: T | null; rawText: string; isHtml?: boolean; parseError?: string }> {
   let rawText = '';
+  const contentType = response.headers.get('content-type') || '';
   try {
     rawText = await response.text();
   } catch (readErr: any) {
@@ -369,6 +384,7 @@ export async function safeParseJsonResponse<T = any>(
       ok: false,
       data: null,
       rawText: '',
+      isHtml: false,
       parseError: readErr?.message || 'Gagal membaca aliran respons HTTP'
     };
   }
@@ -378,107 +394,193 @@ export async function safeParseJsonResponse<T = any>(
       ok: false,
       data: null,
       rawText,
+      isHtml: false,
       parseError: 'Respons server kosong (aliran koneksi terputus / batas waktu eksekusi)'
     };
   }
+
+  // Deteksi dokumen HTML (rute internal /api tidak ada di Cloudflare static hosting)
+  if (isHtmlResponse(trimmed, contentType)) {
+    return {
+      ok: false,
+      data: null,
+      rawText,
+      isHtml: true,
+      parseError: 'Respons adalah dokumen HTML (bukan JSON)'
+    };
+  }
+
   try {
     const parsed = JSON.parse(trimmed) as T;
-    return { ok: response.ok, data: parsed, rawText };
+    return { ok: response.ok, data: parsed, rawText, isHtml: false };
   } catch {
-    if (!trimmed.startsWith('<!DOCTYPE') && !trimmed.toLowerCase().startsWith('<html')) {
-      const firstBrace = trimmed.indexOf('{');
-      const lastBrace = trimmed.lastIndexOf('}');
-      if (firstBrace !== -1 && lastBrace > firstBrace) {
-        try {
-          const extracted = JSON.parse(trimmed.slice(firstBrace, lastBrace + 1)) as T;
-          return { ok: response.ok, data: extracted, rawText };
-        } catch {
-          // fallthrough to structured error
-        }
+    const firstBrace = trimmed.indexOf('{');
+    const lastBrace = trimmed.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      try {
+        const extracted = JSON.parse(trimmed.slice(firstBrace, lastBrace + 1)) as T;
+        return { ok: response.ok, data: extracted, rawText, isHtml: false };
+      } catch {
+        // fallthrough to structured error
       }
     }
     return {
       ok: false,
       data: null,
       rawText,
+      isHtml: false,
       parseError: 'Format respons server terpotong atau bukan JSON valid'
     };
   }
 }
 
-/** Fetch data from GAS endpoint (reads full unfiltered REKAP SUSUT KROSOK sheet) */
+/**
+ * Fetch data from GAS endpoint with automatic fallback to direct GAS URL with CORS
+ * jika rute internal /api proxy mengembalikan HTML atau gagal.
+ */
 export async function fetchFromGAS(
   gasUrl: string,
   referenceRecords: KrosokRecord[] = []
 ): Promise<KrosokRecord[]> {
-  if (!gasUrl || !gasUrl.startsWith('http')) {
-    return [];
-  }
-  try {
-    const urlWithAction = gasUrl.includes('?')
-      ? `${gasUrl}&action=readAll`
-      : `${gasUrl}?action=readAll`;
-    const response = await fetch(urlWithAction, { redirect: 'follow' });
-    if (!response.ok) {
-      console.warn(`GAS Endpoint notice (Status: ${response.status})`);
-      return [];
-    }
-    const parsed = await safeParseJsonResponse<any>(response);
-    if (!parsed.data) {
-      if (parsed.parseError) {
-        console.warn('GAS JSON parse guard notice:', parsed.parseError);
-      }
-      return [];
-    }
-    const data = parsed.data;
-    const rawList: any[] = Array.isArray(data)
-      ? data
-      : data && Array.isArray(data.records)
-      ? data.records
-      : [];
-    if (rawList.length === 0) return [];
+  const primaryUrl = gasUrl && gasUrl.trim() ? gasUrl.trim() : DEFAULT_CONFIG.gasUrl;
 
-    // Isolate the authoritative primary sheet block if GAS iterated across multiple tabs
-    const blocks: any[][] = [];
-    let currentBlock: any[] = [];
-    for (let i = 0; i < rawList.length; i++) {
-      if (
-        i > 0 &&
-        Number(rawList[i].srcRow) <= Number(rawList[i - 1].srcRow)
-      ) {
-        blocks.push(currentBlock);
-        currentBlock = [];
-      }
-      currentBlock.push(rawList[i]);
-    }
-    if (currentBlock.length > 0) blocks.push(currentBlock);
+  const attemptFetch = async (targetUrl: string): Promise<KrosokRecord[] | null> => {
+    try {
+      const urlWithAction = targetUrl.includes('?')
+        ? `${targetUrl}&action=readAll`
+        : `${targetUrl}?action=readAll`;
+      const response = await fetch(urlWithAction, { redirect: 'follow' });
+      const contentType = response.headers.get('content-type') || '';
+      const parsed = await safeParseJsonResponse<any>(response);
 
-    // Choose the largest contiguous sheet block (REKAP SUSUT KROSOK)
-    const mainBlock = blocks.reduce(
-      (best, cand) => (cand.length >= best.length ? cand : best),
-      blocks[0]
+      // Jika respons berupa HTML (misal Cloudflare SPA fallback menyajikan index.html untuk rute /api)
+      if (parsed.isHtml || isHtmlResponse(parsed.rawText, contentType)) {
+        console.warn(
+          `[Cloudflare Migration] Rute ${targetUrl} mengembalikan HTML. Perlu direct fallback ke endpoint Google Apps Script.`
+        );
+        return null;
+      }
+
+      if (!response.ok || !parsed.data) {
+        if (parsed.parseError) {
+          console.warn('GAS JSON parse guard notice:', parsed.parseError);
+        }
+        return null;
+      }
+      const data = parsed.data;
+      const rawList: any[] = Array.isArray(data)
+        ? data
+        : data && Array.isArray(data.records)
+        ? data.records
+        : [];
+      if (rawList.length === 0) return [];
+
+      // Isolate the authoritative primary sheet block if GAS iterated across multiple tabs
+      const blocks: any[][] = [];
+      let currentBlock: any[] = [];
+      for (let i = 0; i < rawList.length; i++) {
+        if (
+          i > 0 &&
+          Number(rawList[i].srcRow) <= Number(rawList[i - 1].srcRow)
+        ) {
+          blocks.push(currentBlock);
+          currentBlock = [];
+        }
+        currentBlock.push(rawList[i]);
+      }
+      if (currentBlock.length > 0) blocks.push(currentBlock);
+
+      // Choose the largest contiguous sheet block (REKAP SUSUT KROSOK)
+      const mainBlock = blocks.reduce(
+        (best, cand) => (cand.length >= best.length ? cand : best),
+        blocks[0]
+      );
+
+      const refMap = new Map<string, KrosokRecord>();
+      referenceRecords.forEach((r) => {
+        refMap.set(`${r.tanggal}|${r.baku.toFixed(1)}|${r.jenisKrosok}`, r);
+        refMap.set(`${r.tanggal}|${r.baku.toFixed(1)}`, r);
+      });
+
+      const normalized: KrosokRecord[] = [];
+      for (const row of mainBlock) {
+        const bKey1 = `${row.tanggal}|${Number(row.baku || 0).toFixed(1)}|${String(row.jenisKrosok || '').trim()}`;
+        const bKey2 = `${row.tanggal}|${Number(row.baku || 0).toFixed(1)}`;
+        const fallback = refMap.get(bKey1) || refMap.get(bKey2);
+        const clean = normalizeKrosokRecord(row, fallback);
+        if (clean) normalized.push(clean);
+      }
+
+      return normalized;
+    } catch (err) {
+      console.warn(`Fetch notice for ${targetUrl}:`, err);
+      return null;
+    }
+  };
+
+  // 1. Percobaan pertama dengan URL yang dikonfigurasi
+  let result = await attemptFetch(primaryUrl);
+
+  // 2. Jika gagal atau mengembalikan HTML, otomatis fallback langsung ke endpoint GAS dengan CORS
+  if (result === null && primaryUrl !== DEFAULT_CONFIG.gasUrl) {
+    console.warn(
+      `[Cloudflare Fallback] Beralih otomatis ke direct fetch endpoint Google Apps Script: ${DEFAULT_CONFIG.gasUrl}`
     );
-
-    const refMap = new Map<string, KrosokRecord>();
-    referenceRecords.forEach((r) => {
-      refMap.set(`${r.tanggal}|${r.baku.toFixed(1)}|${r.jenisKrosok}`, r);
-      refMap.set(`${r.tanggal}|${r.baku.toFixed(1)}`, r);
-    });
-
-    const normalized: KrosokRecord[] = [];
-    for (const row of mainBlock) {
-      const bKey1 = `${row.tanggal}|${Number(row.baku || 0).toFixed(1)}|${String(row.jenisKrosok || '').trim()}`;
-      const bKey2 = `${row.tanggal}|${Number(row.baku || 0).toFixed(1)}`;
-      const fallback = refMap.get(bKey1) || refMap.get(bKey2);
-      const clean = normalizeKrosokRecord(row, fallback);
-      if (clean) normalized.push(clean);
-    }
-
-    return normalized;
-  } catch (err) {
-    console.warn('fetchFromGAS network notice (using offline/cached records):', err);
-    return [];
+    result = await attemptFetch(DEFAULT_CONFIG.gasUrl);
   }
+
+  return result || [];
+}
+
+/**
+ * Pengiriman POST aman ke GAS dengan fallback otomatis jika rute internal /api proxy
+ * mengembalikan HTML atau gagal saat dihosting di Cloudflare.
+ */
+export async function postToGASWithFallback(
+  gasUrl: string,
+  payload: any
+): Promise<{ ok: boolean; data?: any; error?: string; isFallback?: boolean }> {
+  const primaryUrl = gasUrl && gasUrl.trim() ? gasUrl.trim() : DEFAULT_CONFIG.gasUrl;
+
+  const attemptPost = async (url: string) => {
+    try {
+      const postRes = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload),
+        redirect: 'follow'
+      });
+      const parsedRes = await safeParseJsonResponse<any>(postRes);
+      if (parsedRes.isHtml) {
+        return { isHtml: true, ok: false, error: 'Respons HTML dari proxy' };
+      }
+      return {
+        isHtml: false,
+        ok: postRes.ok && parsedRes.ok,
+        data: parsedRes.data,
+        parseError: parsedRes.parseError
+      };
+    } catch (err: any) {
+      return { isHtml: false, ok: false, error: err?.message || 'Network error' };
+    }
+  };
+
+  let res = await attemptPost(primaryUrl);
+  let isFallback = false;
+
+  // Jika proxy /api mengembalikan HTML atau gagal, lakukan direct fetch ke endpoint GAS resmi
+  if ((res.isHtml || !res.ok) && primaryUrl !== DEFAULT_CONFIG.gasUrl) {
+    console.warn(
+      `[Cloudflare Fallback] POST ke ${primaryUrl} mengembalikan HTML / gagal. Melakukan direct fallback ke ${DEFAULT_CONFIG.gasUrl}`
+    );
+    res = await attemptPost(DEFAULT_CONFIG.gasUrl);
+    isFallback = true;
+  }
+
+  if (res.data) {
+    return { ok: res.ok, data: res.data, isFallback };
+  }
+  return { ok: false, error: res.error || res.parseError || 'Gagal mengirim data ke GAS', isFallback };
 }
 
 /**

@@ -45,6 +45,8 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records, dhpItems = []
   const [filterProses, setFilterProses] = useState('Semua');
   const [filterTahun, setFilterTahun] = useState('Semua');
   const [filterDhpStatus, setFilterDhpStatus] = useState<'Semua' | 'Identik' | 'RekapSaja'>('Semua');
+  // Inisialisasi filter tanggal mutasi default '' (Transaksi Terkini) agar tabel tidak kosong saat pertama kali dibuka
+  const [filterTanggal, setFilterTanggal] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
@@ -93,6 +95,7 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records, dhpItems = []
         (r.jenisPerlakuan && r.jenisPerlakuan.toLowerCase().includes(searchTerm.toLowerCase()));
       const matchProses = filterProses === 'Semua' || r.jenisProses === filterProses;
       const matchTahun = filterTahun === 'Semua' || r.tahun === filterTahun;
+      const matchTanggal = !filterTanggal || r.tanggal === filterTanggal;
 
       const isDhpIdentik = Boolean(dhpLookup.getMatch(r));
       const matchDhp =
@@ -100,7 +103,7 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records, dhpItems = []
         (filterDhpStatus === 'Identik' && isDhpIdentik) ||
         (filterDhpStatus === 'RekapSaja' && !isDhpIdentik);
 
-      return matchSearch && matchProses && matchTahun && matchDhp;
+      return matchSearch && matchProses && matchTahun && matchTanggal && matchDhp;
     });
 
     // Urutkan periode terbaru berada paling atas, periode terlama di posisi paling bawah
@@ -110,7 +113,7 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records, dhpItems = []
       }
       return b.srcRow - a.srcRow;
     });
-  }, [records, searchTerm, filterProses, filterTahun, filterDhpStatus, dhpLookup]);
+  }, [records, searchTerm, filterProses, filterTahun, filterTanggal, filterDhpStatus, dhpLookup]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRecords.length / pageSize));
   const currentPageRecords = useMemo(() => {
@@ -217,6 +220,38 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records, dhpItems = []
               </option>
             ))}
           </select>
+
+          {/* Filter Tanggal Transaksi / Mutasi — Default '' (Terkini) */}
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2 py-1">
+            <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap">Tanggal:</span>
+            <input
+              type="date"
+              value={filterTanggal}
+              onChange={(e) => {
+                setFilterTanggal(e.target.value);
+                setPage(1);
+              }}
+              title="Filter tanggal mutasi/proses spesifik. Kosongkan untuk menampilkan transaksi terkini."
+              className="text-xs font-semibold text-slate-800 bg-transparent focus:outline-none cursor-pointer"
+            />
+            {filterTanggal ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setFilterTanggal('');
+                  setPage(1);
+                }}
+                className="text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                title="Kembali ke transaksi terkini (tanpa filter tanggal)"
+              >
+                Reset Terkini
+              </button>
+            ) : (
+              <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                Terkini
+              </span>
+            )}
+          </div>
 
           <span className="text-xs text-slate-500 font-medium">
             Menampilkan {filteredRecords.length.toLocaleString('id-ID')} dari {records.length.toLocaleString('id-ID')} entri

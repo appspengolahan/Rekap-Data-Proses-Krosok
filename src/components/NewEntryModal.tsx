@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, PlusCircle, Scale, Sparkles, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { KrosokRecord, FilterOptions } from '../types';
-import { formatNum, formatPct, round2, MONTH_ORDER } from '../services/dataService';
+import { formatNum, formatPct, round2, MONTH_ORDER, postToGASWithFallback } from '../services/dataService';
 
 interface NewEntryModalProps {
   isOpen: boolean;
@@ -79,18 +79,11 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({
       debuAirPct
     };
 
-    // Try posting to GAS if URL configured
-    if (gasUrl && gasUrl.startsWith('http')) {
-      try {
-        await fetch(gasUrl, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(newRec)
-        });
-      } catch (err) {
-        console.warn('Silent fallback: saved to local buffer', err);
-      }
+    // Try posting to GAS if URL configured (with automatic Cloudflare HTML / proxy fallback)
+    try {
+      await postToGASWithFallback(gasUrl, newRec);
+    } catch (err) {
+      console.warn('Silent fallback: saved to local buffer', err);
     }
 
     onAddRecord(newRec);
