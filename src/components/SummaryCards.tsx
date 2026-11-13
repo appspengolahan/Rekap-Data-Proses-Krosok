@@ -1,7 +1,7 @@
 import React from 'react';
 import { Calendar, Layers, Scale, Sparkles, Droplets, Wind, ArrowRight, TrendingDown } from 'lucide-react';
 import { RingkasanData, FilterOptions } from '../types';
-import { formatNum, formatPct, getPctClass, MONTH_ORDER } from '../services/dataService';
+import { formatInt, formatNum, formatPct, getPctClass, MONTH_ORDER } from '../services/dataService';
 
 interface SummaryCardsProps {
   ringkasanTahunan: RingkasanData;
@@ -50,7 +50,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
           </div>
           <div className="my-1.5">
             <span className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
-              {r.jumlahData.toLocaleString('id-ID')}
+              {formatInt(r.jumlahData)}
             </span>
           </div>
           <div className="text-[11.5px] text-slate-500 font-medium">Batch terproses</div>
@@ -158,7 +158,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
               <select
                 value={selectedTahun}
                 onChange={(e) => onTahunChange(e.target.value)}
-                className="no-print text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl px-2.5 py-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="no-print min-h-[44px] lg:min-h-[34px] text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl px-2.5 py-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
               >
                 <option value="2026">2026</option>
                 <option value="2025">2025</option>
@@ -194,7 +194,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
               <select
                 value={bulanRingkasan}
                 onChange={(e) => onBulanRingkasanChange(e.target.value)}
-                className="no-print text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl px-2.5 py-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="no-print min-h-[44px] lg:min-h-[34px] text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl px-2.5 py-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
               >
                 <option value="Semua">Semua Bulan</option>
                 {filterOptions.bulan.map((b) => (
@@ -207,7 +207,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
               <select
                 value={selectedTahun}
                 onChange={(e) => onTahunChange(e.target.value)}
-                className="no-print text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl px-2.5 py-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="no-print min-h-[44px] lg:min-h-[34px] text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl px-2.5 py-1 focus:ring-2 focus:ring-blue-500 focus:outline-none"
               >
                 <option value="2026">2026</option>
                 <option value="2025">2025</option>
@@ -247,7 +247,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
             <select
               value={periodeAwal.bulan}
               onChange={(e) => onPeriodeAwalChange({ ...periodeAwal, bulan: e.target.value })}
-              className="text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5"
+              className="min-h-[44px] lg:min-h-[34px] text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5"
             >
               {MONTH_ORDER.map((b) => (
                 <option key={b} value={b}>
@@ -258,7 +258,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
             <select
               value={periodeAwal.tahun}
               onChange={(e) => onPeriodeAwalChange({ ...periodeAwal, tahun: e.target.value })}
-              className="text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5"
+              className="min-h-[44px] lg:min-h-[34px] text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5"
             >
               {filterOptions.tahun.map((t) => (
                 <option key={t} value={t}>
@@ -271,7 +271,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
             <select
               value={periodeAkhir.bulan}
               onChange={(e) => onPeriodeAkhirChange({ ...periodeAkhir, bulan: e.target.value })}
-              className="text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5"
+              className="min-h-[44px] lg:min-h-[34px] text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5"
             >
               {MONTH_ORDER.map((b) => (
                 <option key={b} value={b}>
@@ -282,7 +282,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
             <select
               value={periodeAkhir.tahun}
               onChange={(e) => onPeriodeAkhirChange({ ...periodeAkhir, tahun: e.target.value })}
-              className="text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5"
+              className="min-h-[44px] lg:min-h-[34px] text-xs font-semibold bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5"
             >
               {filterOptions.tahun.map((t) => (
                 <option key={t} value={t}>
@@ -293,7 +293,7 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
 
             <button
               onClick={onApplyPeriode}
-              className="px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors ml-1"
+              className="min-h-[44px] lg:min-h-[34px] px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs transition-colors ml-1"
             >
               Terapkan
             </button>
@@ -307,10 +307,10 @@ export const SummaryCards: React.FC<SummaryCardsProps> = ({
           </span>
           <button
             onClick={onNavigateToJenisTab}
-            className="no-print text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 hover:underline"
+            className="no-print min-h-[44px] lg:min-h-[32px] text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 hover:underline text-left"
           >
             <span>🔗 Rentang ini juga mengatur tabel Rekap per Jenis Krosok</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+            <ArrowRight className="w-3.5 h-3.5 shrink-0" />
           </button>
         </div>
 

@@ -57,9 +57,16 @@ export const DEFAULT_SWITCH_APPS: SwitchAppModule[] = [
 
 const STORAGE_KEY = 'krosok_switch_apps_v2';
 
+let _switchAppsRaw: string | null | undefined = undefined;
+let _switchAppsVal: SwitchAppModule[] | null = null;
+
 export function loadSwitchApps(): SwitchAppModule[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
+    if (_switchAppsVal && raw === _switchAppsRaw) {
+      return _switchAppsVal;
+    }
+    _switchAppsRaw = raw;
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -73,20 +80,27 @@ export function loadSwitchApps(): SwitchAppModule[] {
           return item;
         });
         if (mutated) {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(healed));
+          const healedRaw = JSON.stringify(healed);
+          localStorage.setItem(STORAGE_KEY, healedRaw);
+          _switchAppsRaw = healedRaw;
         }
+        _switchAppsVal = healed;
         return healed;
       }
     }
   } catch (err) {
     console.error('Failed to load switch apps from localStorage', err);
   }
+  _switchAppsVal = DEFAULT_SWITCH_APPS;
   return DEFAULT_SWITCH_APPS;
 }
 
 export function saveSwitchApps(apps: SwitchAppModule[]): void {
+  _switchAppsVal = apps;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(apps));
+    const raw = JSON.stringify(apps);
+    localStorage.setItem(STORAGE_KEY, raw);
+    _switchAppsRaw = raw;
   } catch (err) {
     console.error('Failed to save switch apps to localStorage', err);
   }

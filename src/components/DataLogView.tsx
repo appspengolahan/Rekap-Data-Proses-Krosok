@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Download, ChevronLeft, ChevronRight, Filter, Database } from 'lucide-react';
 import { KrosokRecord, DhpKrosokItem } from '../types';
-import { formatNum, formatPct, getPctClass, getTodayWibIso } from '../services/dataService';
+import { formatInt, formatNum, formatPct, getPctClass, getTodayWibIso } from '../services/dataService';
 
 const HARI_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const BULAN_NAMES = [
@@ -175,11 +175,11 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records, dhpItems = []
   return (
     <div className="space-y-4 animate-in fade-in duration-200">
       {/* Control Bar */}
-      <div className="no-print bg-white rounded-2xl border border-slate-200/80 shadow-xs p-4 flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2.5 flex-wrap">
+      <div className="no-print bg-white rounded-2xl border border-slate-200/80 shadow-xs p-3 sm:p-4 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap w-full lg:w-auto">
           {/* Search Box */}
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <div className="relative w-full sm:w-56 md:w-64">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Cari varian, tanggal..."
@@ -188,7 +188,7 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records, dhpItems = []
                 setSearchTerm(e.target.value);
                 setPage(1);
               }}
-              className="text-xs pl-8.5 pr-3 py-1.5 rounded-lg border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none w-52 sm:w-64"
+              className="w-full min-h-[44px] lg:min-h-[36px] text-xs pl-9 pr-3 py-1.5 rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
             />
           </div>
 
@@ -199,7 +199,7 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records, dhpItems = []
               setFilterProses(e.target.value);
               setPage(1);
             }}
-            className="text-xs font-medium bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5"
+            className="min-h-[44px] lg:min-h-[36px] text-xs font-medium bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5"
           >
             <option value="Semua">Semua Jalur (SKT + SKM)</option>
             <option value="SKT">SKT</option>
@@ -213,7 +213,7 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records, dhpItems = []
               setFilterTahun(e.target.value);
               setPage(1);
             }}
-            className="text-xs font-medium bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5"
+            className="min-h-[44px] lg:min-h-[36px] text-xs font-medium bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5"
           >
             <option value="Semua">Semua Tahun</option>
             {availableYears.map((y) => (
@@ -224,7 +224,7 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records, dhpItems = []
           </select>
 
           {/* Filter Tanggal Transaksi / Mutasi — Default '' (Terkini) */}
-          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-300 rounded-lg px-2 py-1">
+          <div className="flex items-center gap-1.5 min-h-[44px] lg:min-h-[36px] bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1">
             <span className="text-[11px] font-medium text-slate-500 whitespace-nowrap">Tanggal:</span>
             <input
               type="date"
@@ -243,7 +243,7 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records, dhpItems = []
                   setFilterTanggal('');
                   setPage(1);
                 }}
-                className="text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                className="min-h-[32px] text-[10px] font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded-lg cursor-pointer transition-colors"
                 title="Kembali ke transaksi terkini (tanpa filter tanggal)"
               >
                 Reset Terkini
@@ -256,23 +256,95 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records, dhpItems = []
           </div>
 
           <span className="text-xs text-slate-500 font-medium">
-            Menampilkan {filteredRecords.length.toLocaleString('id-ID')} dari {records.length.toLocaleString('id-ID')} entri
+            Menampilkan {formatInt(filteredRecords.length)} dari {formatInt(records.length)} entri
           </span>
         </div>
 
         {/* Export CSV */}
         <button
           onClick={handleExportCsv}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors"
+          className="inline-flex items-center gap-1.5 min-h-[44px] lg:min-h-[36px] px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-colors"
         >
           <Download className="w-3.5 h-3.5" />
           <span>Export CSV</span>
         </button>
       </div>
 
-      {/* Transactions Table */}
+      {/* Transactions View */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* Mobile Card View (< 768px) for zero horizontal squeeze */}
+        <div className="md:hidden divide-y divide-slate-100">
+          {currentPageRecords.length === 0 ? (
+            <div className="py-10 px-4 text-center text-xs text-slate-400">
+              Tidak ditemukan data yang cocok dengan kriteria pencarian.
+            </div>
+          ) : (
+            currentPageRecords.map((r, idx) => {
+              const dhpMatch = dhpLookup.getMatch(r);
+              return (
+                <div key={idx} className="p-3.5 space-y-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-medium text-slate-500">
+                        {formatTanggalLengkap(r.tanggal, r.tanggalDisplay)} · Row #{r.srcRow}
+                      </div>
+                      <div className="font-bold text-sm text-slate-900 mt-0.5 flex items-center gap-1.5 flex-wrap">
+                        <span>{r.jenisKrosok}</span>
+                        {dhpMatch && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-300">
+                            <Database className="w-2.5 h-2.5 text-emerald-600 shrink-0" />
+                            <span>DHP Identik</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <span
+                      className={`px-2 py-0.5 rounded-lg text-[10px] font-bold shrink-0 ${
+                        r.jenisProses === 'SKT'
+                          ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                          : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                      }`}
+                    >
+                      {r.jenisProses}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 bg-slate-50/80 rounded-xl p-2.5 border border-slate-200/70 text-xs">
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase">Baku (Kg)</div>
+                      <div className="font-bold text-slate-900">{formatNum(r.baku)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase">Hasil (Kg)</div>
+                      <div className="font-bold text-emerald-700">{formatNum(r.hasil)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase">Susut</div>
+                      <div className={`font-bold ${getPctClass(r.susutPct)}`}>
+                        {formatPct(r.susutPct)}%
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase">Susut (Kg)</div>
+                      <div className="font-semibold text-slate-700">{formatNum(r.susutKg)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase">Gagang</div>
+                      <div className="font-semibold text-slate-700">{formatPct(r.gagangPct)}%</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase">Debu/Air</div>
+                      <div className="font-semibold text-slate-700">{formatPct(r.debuAirPct)}%</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Tablet & Desktop Table View (>= 768px) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-xs text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/80 text-slate-500 border-b border-slate-200 uppercase font-semibold text-[10.5px] tracking-wider">
@@ -372,7 +444,7 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records, dhpItems = []
                 setPageSize(Number(e.target.value));
                 setPage(1);
               }}
-              className="text-xs bg-slate-50 border border-slate-300 rounded px-2 py-1"
+              className="min-h-[44px] lg:min-h-[34px] text-xs bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1"
             >
               <option value={15}>15</option>
               <option value={25}>25</option>
@@ -384,21 +456,23 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records, dhpItems = []
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1}
-              className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 disabled:opacity-40"
+              className="min-h-[44px] min-w-[44px] lg:min-h-[36px] lg:min-w-[36px] flex items-center justify-center rounded-xl border border-slate-200 hover:bg-slate-100 disabled:opacity-40"
+              aria-label="Halaman sebelumnya"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="text-xs font-semibold px-2 py-1 bg-slate-100 rounded">
+            <span className="text-xs font-semibold px-3 py-1.5 bg-slate-100 rounded-lg">
               {page}
             </span>
             <button
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page >= totalPages}
-              className="p-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 disabled:opacity-40"
+              className="min-h-[44px] min-w-[44px] lg:min-h-[36px] lg:min-w-[36px] flex items-center justify-center rounded-xl border border-slate-200 hover:bg-slate-100 disabled:opacity-40"
+              aria-label="Halaman berikutnya"
             >
               <ChevronRight className="w-4 h-4" />
             </button>

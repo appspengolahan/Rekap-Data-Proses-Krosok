@@ -118,7 +118,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Mobile Backdrop */}
       {isOpenMobile && (
         <div
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-40 md:hidden"
+          className="fixed inset-0 bg-slate-900/75 z-40 md:hidden"
           onClick={onCloseMobile}
         />
       )}
@@ -185,7 +185,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30 ring-1 ring-blue-400'
                           : 'text-slate-400 hover:text-white hover:bg-slate-800/80'
                       }`
-                    : `w-full gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold ${
+                    : `w-full min-h-[44px] gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold ${
                         isActive
                           ? 'bg-blue-600 text-white shadow-md shadow-blue-600/30'
                           : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/80'

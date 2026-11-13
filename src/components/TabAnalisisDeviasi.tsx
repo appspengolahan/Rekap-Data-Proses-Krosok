@@ -33,7 +33,7 @@ import {
   KrosokRecord,
   KrosokStandarAcuan
 } from '../types';
-import { formatNum, formatPct, formatWibLongDate, getTodayWibIso, MONTH_ORDER, round2 } from '../services/dataService';
+import { formatInt, formatNum, formatPct, formatWibLongDate, getTodayWibIso, MONTH_ORDER, round2 } from '../services/dataService';
 import {
   calculateBaselineFromPeriod,
   computeEvaluasiBulananKrosok,
@@ -545,7 +545,7 @@ export const TabAnalisisDeviasi: React.FC<TabAnalisisDeviasiProps> = ({
               <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500 mt-1">
                 <span>Sumber Data Tunggal:</span>
                 <span className="font-semibold text-slate-700">
-                  Sheet Rekap Susut Krosok ({(rawRekapCount ?? records.length).toLocaleString('id-ID')} baris riil)
+                  Sheet Rekap Susut Krosok ({formatInt(rawRekapCount ?? records.length)} baris riil)
                 </span>
                 <span aria-hidden="true">·</span>
                 <span className="font-semibold text-slate-700">
@@ -1543,9 +1543,9 @@ export const TabAnalisisDeviasi: React.FC<TabAnalisisDeviasiProps> = ({
           MODAL UBAH / TAMBAH STANDAR ACUAN VARIAN
       ===================================================================== */}
       {editingItem && (
-        <div className="no-print fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="no-print fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 sm:backdrop-blur-xs">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full max-h-[90dvh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 pt-4 pb-3 shrink-0">
               <div>
                 <h3 className="text-sm font-bold text-slate-900">
                   {isAddingNewStandard
@@ -1559,13 +1559,14 @@ export const TabAnalisisDeviasi: React.FC<TabAnalisisDeviasiProps> = ({
               <button
                 type="button"
                 onClick={() => setEditingItem(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                aria-label="Tutup editor standar acuan"
+                className="min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0 inline-flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer shrink-0"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
+            <div className="p-5 overflow-y-auto space-y-3 text-xs flex-1">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
                   Nama Jenis Krosok
@@ -1661,18 +1662,18 @@ export const TabAnalisisDeviasi: React.FC<TabAnalisisDeviasiProps> = ({
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+            <div className="px-5 py-3 flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50/50 shrink-0 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3">
               <button
                 type="button"
                 onClick={() => setEditingItem(null)}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                className="min-h-[44px] lg:min-h-[34px] px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
               >
                 Batal
               </button>
               <button
                 type="button"
                 onClick={handleSaveEditedStandard}
-                className="px-4 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
+                className="min-h-[44px] lg:min-h-[34px] px-4 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
               >
                 Simpan Standar
               </button>

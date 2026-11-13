@@ -99,10 +99,10 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({
   };
 
   return (
-    <div className="no-print fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="no-print fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/75 sm:backdrop-blur-xs animate-in fade-in">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-xl overflow-hidden flex flex-col max-h-[90dvh]">
         {/* Header */}
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+        <div className="px-4 sm:px-5 py-3.5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50 shrink-0">
           <div className="flex items-center gap-2.5">
             <span className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
               <PlusCircle className="w-5 h-5" />
@@ -116,7 +116,8 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            className="min-h-[44px] min-w-[44px] flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+            aria-label="Tutup modal"
           >
             <X className="w-5 h-5" />
           </button>
@@ -149,7 +150,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setJenisProses('SKT')}
-                  className={`flex-1 py-2 rounded-xl font-bold border transition-all ${
+                  className={`flex-1 min-h-[44px] py-2 rounded-xl font-bold border transition-all ${
                     jenisProses === 'SKT'
                       ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
                       : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
@@ -160,7 +161,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setJenisProses('SKM')}
-                  className={`flex-1 py-2 rounded-xl font-bold border transition-all ${
+                  className={`flex-1 min-h-[44px] py-2 rounded-xl font-bold border transition-all ${
                     jenisProses === 'SKM'
                       ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
                       : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-slate-100'
@@ -287,18 +288,18 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({
             </div>
           </div>
 
-          <div className="pt-2 flex justify-end gap-2">
+          <div className="pt-2 pb-[env(safe-area-inset-bottom)] flex justify-end gap-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold"
+              className="min-h-[44px] px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 font-semibold"
             >
               Batal
             </button>
             <button
               type="submit"
               disabled={submitting || !numBaku}
-              className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs disabled:opacity-50"
+              className="min-h-[44px] px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-xs disabled:opacity-50"
             >
               {submitting ? 'Menyimpan...' : 'Simpan Transaksi'}
             </button>

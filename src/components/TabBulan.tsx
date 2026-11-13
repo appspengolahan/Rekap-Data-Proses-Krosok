@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { FileText, Calendar, Maximize2, RotateCcw, Filter, CheckCircle2 } from 'lucide-react';
 import { KrosokRecord, RekapGroup } from '../types';
 import {
+  formatInt,
   formatNum,
   formatPct,
   getPctClass,
@@ -126,7 +127,7 @@ export const TabBulan: React.FC<TabBulanProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={onExportTabPdf}
-              className="no-print inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors border border-slate-200 shadow-2xs"
+              className="no-print inline-flex items-center gap-1.5 min-h-[44px] lg:min-h-[34px] px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors border border-slate-200 shadow-2xs"
             >
               <FileText className="w-3.5 h-3.5 text-blue-600" />
               <span>Export Tab Ini (PDF)</span>
@@ -146,7 +147,7 @@ export const TabBulan: React.FC<TabBulanProps> = ({
                 id="filterBulanAwal"
                 value={bulanAwal}
                 onChange={(e) => setBulanAwal(e.target.value)}
-                className="text-xs font-bold bg-white hover:bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 cursor-pointer shadow-2xs"
+                className="min-h-[44px] lg:min-h-[34px] text-xs font-bold bg-white hover:bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 cursor-pointer shadow-2xs"
               >
                 {MONTH_ORDER.map((m) => (
                   <option key={m} value={m}>
@@ -167,7 +168,7 @@ export const TabBulan: React.FC<TabBulanProps> = ({
                 id="filterBulanAkhir"
                 value={bulanAkhir}
                 onChange={(e) => setBulanAkhir(e.target.value)}
-                className="text-xs font-bold bg-white hover:bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 cursor-pointer shadow-2xs"
+                className="min-h-[44px] lg:min-h-[34px] text-xs font-bold bg-white hover:bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 cursor-pointer shadow-2xs"
               >
                 {MONTH_ORDER.map((m) => (
                   <option key={m} value={m}>
@@ -186,7 +187,7 @@ export const TabBulan: React.FC<TabBulanProps> = ({
                 id="filterTahunBulan"
                 value={selectedTahun}
                 onChange={(e) => onTahunChange(e.target.value)}
-                className="text-xs font-bold bg-white hover:bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 cursor-pointer shadow-2xs"
+                className="min-h-[44px] lg:min-h-[34px] text-xs font-bold bg-white hover:bg-slate-50 border border-slate-300 rounded-xl px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all text-slate-900 cursor-pointer shadow-2xs"
               >
                 <option value="2026">2026 (Tahun Berjalan)</option>
                 <option value="2025">2025</option>
@@ -204,7 +205,7 @@ export const TabBulan: React.FC<TabBulanProps> = ({
             {/* Tombol Reset Default (2026) */}
             <button
               onClick={handleResetDefault}
-              className="no-print inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-all active:scale-95 cursor-pointer ml-1"
+              className="no-print inline-flex items-center gap-1.5 min-h-[44px] lg:min-h-[34px] px-3.5 py-1.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-all active:scale-95 cursor-pointer ml-1"
               title="Kembalikan seluruh filter ke periode tahun berjalan: Januari – Oktober 2026"
             >
               <RotateCcw className="w-3.5 h-3.5" />
@@ -221,7 +222,7 @@ export const TabBulan: React.FC<TabBulanProps> = ({
               </span>
             </span>
             <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-200/80 text-slate-700">
-              {activeRekapBulan.length} Bulan ({totalDataCount.toLocaleString('id-ID')} Batch)
+              {activeRekapBulan.length} Bulan ({formatInt(totalDataCount)} Batch)
             </span>
           </div>
         </div>
@@ -254,7 +255,7 @@ export const TabBulan: React.FC<TabBulanProps> = ({
                     e.stopPropagation();
                     setMaximizedChart('line');
                   }}
-                  className="no-print inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors"
+                  className="no-print inline-flex items-center gap-1 min-h-[36px] px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors"
                 >
                   <Maximize2 className="w-3 h-3" />
                   <span>Perbesar</span>
@@ -329,7 +330,7 @@ export const TabBulan: React.FC<TabBulanProps> = ({
                       e.stopPropagation();
                       setMaximizedChart('bar');
                     }}
-                    className="no-print inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors"
+                    className="no-print inline-flex items-center gap-1 min-h-[36px] px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition-colors"
                   >
                     <Maximize2 className="w-3 h-3" />
                     <span>Perbesar</span>
@@ -418,7 +419,7 @@ export const TabBulan: React.FC<TabBulanProps> = ({
                       <span>{r.label}</span>
                     </td>
                     <td className="py-2.5 px-3 text-right font-medium">
-                      {r.jumlahData.toLocaleString('id-ID')}
+                      {formatInt(r.jumlahData)}
                     </td>
                     <td className="py-2.5 px-3 text-right font-semibold text-slate-900">
                       {formatNum(r.baku)}
@@ -450,7 +451,7 @@ export const TabBulan: React.FC<TabBulanProps> = ({
                 <tr className="bg-slate-100/90 font-bold text-slate-900 border-t-2 border-slate-300">
                   <td className="py-3 px-4">TOTAL / RATA-RATA</td>
                   <td className="py-3 px-3 text-right">
-                    {totalDataCount.toLocaleString('id-ID')}
+                    {formatInt(totalDataCount)}
                   </td>
                   <td className="py-3 px-3 text-right">{formatNum(totalBaku)}</td>
                   <td className="py-3 px-3 text-right text-emerald-900">{formatNum(totalHasil)}</td>

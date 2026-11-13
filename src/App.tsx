@@ -55,6 +55,7 @@ import { ModalDhpIntegrasi } from './components/ModalDhpIntegrasi';
 import { NewEntryModal } from './components/NewEntryModal';
 import { HelpModal } from './components/HelpModal';
 import { DeveloperBlueprintModal } from './components/DeveloperBlueprintModal';
+import { OfflineIndicator, PWAUpdateToast } from './components/PWAInstallButton';
 
 export default function App() {
   // 1. Initial State from Cache (Loads in 0.01s)
@@ -416,7 +417,7 @@ export default function App() {
   };
 
   return (
-    <div className="h-screen bg-slate-100/70 text-slate-800 flex flex-col font-sans antialiased overflow-hidden selection:bg-blue-600 selection:text-white">
+    <div className="h-[100dvh] bg-slate-100/70 text-slate-800 flex flex-col font-sans antialiased overflow-hidden selection:bg-blue-600 selection:text-white">
       {/* Top Header */}
       <Header
         currentRole={currentRole}
@@ -462,7 +463,7 @@ export default function App() {
         />
 
         {/* Main Content Area (Independent scroll) */}
-        <main className="flex-1 min-w-0 overflow-y-auto p-3 sm:p-5 lg:p-6 pb-24 md:pb-10">
+        <main className="flex-1 min-w-0 overflow-y-auto p-3 sm:p-5 lg:p-6 pb-[calc(5.25rem+env(safe-area-inset-bottom))] md:pb-10">
           {/* Global Filter Bar (Shown on standard dashboard data tabs) */}
           {activeTab !== 'switch_app' && activeTab !== 'analisis_deviasi' && (
             <FilterBar
@@ -659,6 +660,10 @@ export default function App() {
         isOpen={isDevBlueprintOpen}
         onClose={() => setIsDevBlueprintOpen(false)}
       />
+
+      {/* PWA Offline & Auto-Update Prompts */}
+      <OfflineIndicator />
+      <PWAUpdateToast />
     </div>
   );
 }

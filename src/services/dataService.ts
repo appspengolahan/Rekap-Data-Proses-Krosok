@@ -39,32 +39,45 @@ const STORAGE_KEYS = {
   DHP_ACTIVE_ISO_DATE: 'krosok_dhp_active_sheet_iso_v1',
 };
 
+let _configCacheRaw: string | null | undefined = undefined;
+let _configCacheVal: GASConfig | null = null;
+
 export function loadConfig(): GASConfig {
   try {
     const saved = localStorage.getItem(STORAGE_KEYS.CONFIG);
+    if (_configCacheVal && saved === _configCacheRaw) {
+      return _configCacheVal;
+    }
+    _configCacheRaw = saved;
     if (saved) {
       const parsed = JSON.parse(saved);
       // Automatically migrate to new standalone URL if user has older or relative /api proxy URL in localStorage
       if (!parsed.gasUrl || parsed.gasUrl.startsWith('/api') || parsed.gasUrl.startsWith('/') || parsed.gasUrl.includes('AKfycbxe') || parsed.gasUrl.includes('AKfycbw')) {
         parsed.gasUrl = DEFAULT_CONFIG.gasUrl;
       }
-      return {
+      const merged: GASConfig = {
         ...DEFAULT_CONFIG,
         ...parsed,
         gasUrl: parsed.gasUrl || DEFAULT_CONFIG.gasUrl,
         dhpSpreadsheetId: parsed.dhpSpreadsheetId || DEFAULT_CONFIG.dhpSpreadsheetId,
         dhpSheetName: parsed.dhpSheetName || DEFAULT_CONFIG.dhpSheetName,
       };
+      _configCacheVal = merged;
+      return merged;
     }
   } catch (e) {
     console.error('Error loading config:', e);
   }
+  _configCacheVal = DEFAULT_CONFIG;
   return DEFAULT_CONFIG;
 }
 
 export function saveConfig(cfg: GASConfig): void {
   try {
-    localStorage.setItem(STORAGE_KEYS.CONFIG, JSON.stringify(cfg));
+    const raw = JSON.stringify(cfg);
+    localStorage.setItem(STORAGE_KEYS.CONFIG, raw);
+    _configCacheRaw = raw;
+    _configCacheVal = cfg;
   } catch (e) {
     console.error('Error saving config:', e);
   }
@@ -74,14 +87,23 @@ export function round2(num: number): number {
   return Math.round((num + Number.EPSILON) * 100) / 100;
 }
 
+const NUM_FMT_1DEC = new Intl.NumberFormat('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const NUM_FMT_2DEC = new Intl.NumberFormat('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const INT_FMT = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 });
+
 export function formatNum(n: number | null | undefined): string {
   if (n === null || n === undefined || isNaN(n)) return '-';
-  return Number(n).toLocaleString('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  return NUM_FMT_1DEC.format(Number(n));
 }
 
 export function formatPct(n: number | null | undefined): string {
   if (n === null || n === undefined || isNaN(n)) return '-';
-  return Number(n).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return NUM_FMT_2DEC.format(Number(n));
+}
+
+export function formatInt(n: number | null | undefined): string {
+  if (n === null || n === undefined || isNaN(n)) return '-';
+  return INT_FMT.format(Math.round(Number(n)));
 }
 
 export function getPctClass(v: number): string {
@@ -914,6 +936,10 @@ export async function fetchUnifiedRekapRecords(
   return gvizRows;
 }
 
+let _lastMergeRekapRef: KrosokRecord[] | null = null;
+let _lastMergeDhpRef: DhpKrosokItem[] | null = null;
+let _lastMergeResult: KrosokRecord[] | null = null;
+
 /**
  * Combines Rekap Proses Krosok with completed live DHP Krosok batches (hasil > 0)
  * as a unified Single Source of Truth (excluding unfinished hasil == 0 batches).
@@ -923,43 +949,65 @@ export function mergeRekapWithCompletedDhp(
   dhpItems: DhpKrosokItem[]
 ): KrosokRecord[] {
   if (!dhpItems || dhpItems.length === 0) return rekapRecords;
+  if (
+    _lastMergeResult &&
+    _lastMergeRekapRef === rekapRecords &&
+    _lastMergeDhpRef === dhpItems
+  ) {
+    return _lastMergeResult;
+  }
 
-  const updatedRekap = rekapRecords.map((r) => {
-    const dhpUpdate = dhpItems.find(
-      (d) =>
-        d.hasil > 0 &&
-        !d.isRestoredFromRekap &&
-        !d.isPhysicsAnomaly &&
-        d.needsUpdateInRekap &&
-        validateKrosokPhysics({
-          baku: d.baku,
-          hasil: d.hasil,
-          gagangKg: d.gagangKg,
-          airKg: d.airKg,
-          debuKg: d.debuKg
-        }).valid &&
-        (d.matchedRow === r.srcRow ||
-          (d.tanggal === r.tanggal &&
-            Math.abs(d.baku - r.baku) < 0.2 &&
-            d.jenisTembakau.toLowerCase() === r.jenisKrosok.toLowerCase()))
-    );
-    // Layer 1 Non-Destructive Guard: never overwrite existing Hasil > 0 with <= 0 or invalid physics
-    if (!dhpUpdate || dhpUpdate.hasil <= 0) return r;
-    const susutKg = round2(dhpUpdate.baku - dhpUpdate.hasil);
-    const debuAirKg = round2((dhpUpdate.airKg || 0) + (dhpUpdate.debuKg || 0));
-    return {
-      ...r,
-      hasil: dhpUpdate.hasil,
-      susutKg,
-      susutPct: round2((susutKg / dhpUpdate.baku) * 100),
-      gagangKg: dhpUpdate.gagangKg || 0,
-      gagangPct: round2(((dhpUpdate.gagangKg || 0) / dhpUpdate.baku) * 100),
-      airKg: dhpUpdate.airKg || 0,
-      debuKg: dhpUpdate.debuKg || 0,
-      debuAirKg,
-      debuAirPct: round2((debuAirKg / dhpUpdate.baku) * 100)
-    };
-  });
+  const updateByRow = new Map<number, DhpKrosokItem>();
+  const updateByKey = new Map<string, DhpKrosokItem>();
+  for (let i = 0; i < dhpItems.length; i++) {
+    const d = dhpItems[i];
+    if (
+      d.hasil > 0 &&
+      !d.isRestoredFromRekap &&
+      !d.isPhysicsAnomaly &&
+      d.needsUpdateInRekap &&
+      validateKrosokPhysics({
+        baku: d.baku,
+        hasil: d.hasil,
+        gagangKg: d.gagangKg,
+        airKg: d.airKg,
+        debuKg: d.debuKg
+      }).valid
+    ) {
+      if (d.matchedRow) updateByRow.set(d.matchedRow, d);
+      updateByKey.set(
+        `${d.tanggal}|${d.jenisTembakau.toLowerCase()}|${d.baku.toFixed(1)}`,
+        d
+      );
+    }
+  }
+
+  const updatedRekap =
+    updateByRow.size === 0 && updateByKey.size === 0
+      ? rekapRecords
+      : rekapRecords.map((r) => {
+          const dhpUpdate =
+            (r.srcRow ? updateByRow.get(r.srcRow) : undefined) ||
+            updateByKey.get(
+              `${r.tanggal}|${r.jenisKrosok.toLowerCase()}|${r.baku.toFixed(1)}`
+            );
+          // Layer 1 Non-Destructive Guard: never overwrite existing Hasil > 0 with <= 0 or invalid physics
+          if (!dhpUpdate || dhpUpdate.hasil <= 0) return r;
+          const susutKg = round2(dhpUpdate.baku - dhpUpdate.hasil);
+          const debuAirKg = round2((dhpUpdate.airKg || 0) + (dhpUpdate.debuKg || 0));
+          return {
+            ...r,
+            hasil: dhpUpdate.hasil,
+            susutKg,
+            susutPct: round2((susutKg / dhpUpdate.baku) * 100),
+            gagangKg: dhpUpdate.gagangKg || 0,
+            gagangPct: round2(((dhpUpdate.gagangKg || 0) / dhpUpdate.baku) * 100),
+            airKg: dhpUpdate.airKg || 0,
+            debuKg: dhpUpdate.debuKg || 0,
+            debuAirKg,
+            debuAirPct: round2((debuAirKg / dhpUpdate.baku) * 100)
+          };
+        });
 
   const existingKeys = new Set(
     updatedRekap.map(
@@ -1017,9 +1065,15 @@ export function mergeRekapWithCompletedDhp(
     });
   });
 
-  return newCompletedFromDhp.length > 0
-    ? [...updatedRekap, ...newCompletedFromDhp]
-    : updatedRekap;
+  const mergedResult =
+    newCompletedFromDhp.length > 0
+      ? [...updatedRekap, ...newCompletedFromDhp]
+      : updatedRekap;
+
+  _lastMergeRekapRef = rekapRecords;
+  _lastMergeDhpRef = dhpItems;
+  _lastMergeResult = mergedResult;
+  return mergedResult;
 }
 
 /** Fetch and parse DHP Krosok items from Sheet DHP Krosok (Tab: INTEGRASI DATA) */
@@ -1273,15 +1327,21 @@ export async function fetchDhpKrosokRecords(
   }
 }
 
+let _dhpActiveLabelCache: string | null = null;
+let _dhpActiveIsoCache: string | null = null;
+
 export function getDhpActiveSheetDateLabel(): string {
+  if (_dhpActiveLabelCache !== null) return _dhpActiveLabelCache;
   try {
-    return localStorage.getItem(STORAGE_KEYS.DHP_ACTIVE_DATE) || '';
+    _dhpActiveLabelCache = localStorage.getItem(STORAGE_KEYS.DHP_ACTIVE_DATE) || '';
+    return _dhpActiveLabelCache;
   } catch {
     return '';
   }
 }
 
 function setDhpActiveSheetDateLabel(label: string): void {
+  _dhpActiveLabelCache = label;
   try {
     localStorage.setItem(STORAGE_KEYS.DHP_ACTIVE_DATE, label);
   } catch {
@@ -1290,14 +1350,17 @@ function setDhpActiveSheetDateLabel(label: string): void {
 }
 
 export function getDhpActiveSheetIsoDate(): string {
+  if (_dhpActiveIsoCache !== null) return _dhpActiveIsoCache;
   try {
-    return localStorage.getItem(STORAGE_KEYS.DHP_ACTIVE_ISO_DATE) || '';
+    _dhpActiveIsoCache = localStorage.getItem(STORAGE_KEYS.DHP_ACTIVE_ISO_DATE) || '';
+    return _dhpActiveIsoCache;
   } catch {
     return '';
   }
 }
 
 function setDhpActiveSheetIsoDate(isoDate: string): void {
+  _dhpActiveIsoCache = isoDate;
   try {
     localStorage.setItem(STORAGE_KEYS.DHP_ACTIVE_ISO_DATE, isoDate);
   } catch {
@@ -1471,14 +1534,23 @@ export async function fetchRekapActiveDateAudit(
   }
 }
 
-/** Get cached DHP items from localStorage (Zero dummy/hardcoded fallback) */
+let _dhpCacheRaw: string | null | undefined = undefined;
+let _dhpCacheVal: DhpKrosokItem[] | null = null;
+let _recordsCacheRaw: string | null | undefined = undefined;
+let _recordsCacheVal: KrosokRecord[] | null = null;
+
+/** Get cached DHP items from localStorage (Zero dummy/hardcoded fallback, in-memory cached) */
 export function getCachedDhpItems(): DhpKrosokItem[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.DHP_CACHE);
+    if (_dhpCacheVal && raw === _dhpCacheRaw) {
+      return _dhpCacheVal;
+    }
+    _dhpCacheRaw = raw;
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed.map((item: DhpKrosokItem) => {
+        _dhpCacheVal = parsed.map((item: DhpKrosokItem) => {
           const baku = Number(item.baku) || 0;
           const hasil = Number(item.hasil) || 0;
           const rawSusut = Number(item.susutKg) || 0;
@@ -1506,27 +1578,36 @@ export function getCachedDhpItems(): DhpKrosokItem[] {
             susutPct
           };
         });
+        return _dhpCacheVal;
       }
     }
   } catch (e) {
     console.warn('Error reading cached DHP items:', e);
   }
+  _dhpCacheVal = [];
   return [];
 }
 
 /** Save DHP items to localStorage */
 export function setCachedDhpItems(items: DhpKrosokItem[]): void {
+  _dhpCacheVal = items;
   try {
-    localStorage.setItem(STORAGE_KEYS.DHP_CACHE, JSON.stringify(items));
+    const raw = JSON.stringify(items);
+    localStorage.setItem(STORAGE_KEYS.DHP_CACHE, raw);
+    _dhpCacheRaw = raw;
   } catch (e) {
     console.warn('Error saving DHP cache:', e);
   }
 }
 
-/** Load records from localStorage cache or fallback to real Rekap snapshot */
+/** Load records from localStorage cache or fallback to real Rekap snapshot (in-memory cached) */
 export function getCachedRecords(): KrosokRecord[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.RAW_DATA);
+    if (_recordsCacheVal && raw === _recordsCacheRaw) {
+      return _recordsCacheVal;
+    }
+    _recordsCacheRaw = raw;
     if (raw) {
       const parsed: KrosokRecord[] = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
@@ -1541,24 +1622,30 @@ export function getCachedRecords(): KrosokRecord[] {
               mergedMap.set(`${r.tanggal}|${r.baku.toFixed(1)}|${r.jenisKrosok.toLowerCase()}`, r);
             }
           });
-          return Array.from(mergedMap.values()).sort((a, b) =>
+          _recordsCacheVal = Array.from(mergedMap.values()).sort((a, b) =>
             a.tanggal !== b.tanggal ? a.tanggal.localeCompare(b.tanggal) : a.srcRow - b.srcRow
           );
+          return _recordsCacheVal;
         }
-        return parsed;
+        _recordsCacheVal = parsed;
+        return _recordsCacheVal;
       }
     }
   } catch (e) {
     console.error('Error reading cached records:', e);
   }
+  _recordsCacheVal = INITIAL_SEED_RECORDS;
   return INITIAL_SEED_RECORDS;
 }
 
 /** Save records to localStorage */
 export function setCachedRecords(records: KrosokRecord[]): void {
+  _recordsCacheVal = records;
   try {
-    localStorage.setItem(STORAGE_KEYS.RAW_DATA, JSON.stringify(records));
+    const raw = JSON.stringify(records);
+    localStorage.setItem(STORAGE_KEYS.RAW_DATA, raw);
     localStorage.setItem(STORAGE_KEYS.LAST_FETCH, Date.now().toString());
+    _recordsCacheRaw = raw;
   } catch (e) {
     console.error('Error writing cached records to localStorage:', e);
   }
@@ -1869,6 +1956,19 @@ export function computeTrendJenisKrosok(
   return { jenisKrosok, data: list };
 }
 
+let _lastDashCache: {
+  records: KrosokRecord[];
+  tahun: string;
+  bulanRingkasan: string;
+  jenisProses: string;
+  pAwalBulan: string;
+  pAwalTahun: string;
+  pAkhirBulan: string;
+  pAkhirTahun: string;
+  selectedTrendJenis?: string;
+  result: DashboardData;
+} | null = null;
+
 /** Complete Dashboard Assembler */
 export function buildDashboardData(
   records: KrosokRecord[],
@@ -1879,6 +1979,21 @@ export function buildDashboardData(
   periodeAkhir: { bulan: string; tahun: string },
   selectedTrendJenis?: string
 ): DashboardData {
+  if (
+    _lastDashCache &&
+    _lastDashCache.records === records &&
+    _lastDashCache.tahun === tahun &&
+    _lastDashCache.bulanRingkasan === bulanRingkasan &&
+    _lastDashCache.jenisProses === jenisProses &&
+    _lastDashCache.pAwalBulan === periodeAwal.bulan &&
+    _lastDashCache.pAwalTahun === periodeAwal.tahun &&
+    _lastDashCache.pAkhirBulan === periodeAkhir.bulan &&
+    _lastDashCache.pAkhirTahun === periodeAkhir.tahun &&
+    _lastDashCache.selectedTrendJenis === selectedTrendJenis
+  ) {
+    return _lastDashCache.result;
+  }
+
   const filterOptions = computeFilterOptions(records);
   const rekapJenisPeriode = computeRekapJenisKrosokPeriode(
     records,
@@ -1896,7 +2011,7 @@ export function buildDashboardData(
       ? rekapJenisPeriode[0].label
       : filterOptions.jenisKrosok[0] || 'Zambia M1L (2023)';
 
-  return {
+  const result: DashboardData = {
     filterOptions,
     entriTerkini: getEntriTerkini(records),
     lastUpdated: formatWibHHMMSS(),
@@ -1914,4 +2029,19 @@ export function buildDashboardData(
     rekapJenisKrosokPeriode: rekapJenisPeriode,
     trendJenis: computeTrendJenisKrosok(records, tahun, defaultJenis, jenisProses),
   };
+
+  _lastDashCache = {
+    records,
+    tahun,
+    bulanRingkasan,
+    jenisProses,
+    pAwalBulan: periodeAwal.bulan,
+    pAwalTahun: periodeAwal.tahun,
+    pAkhirBulan: periodeAkhir.bulan,
+    pAkhirTahun: periodeAkhir.tahun,
+    selectedTrendJenis,
+    result
+  };
+
+  return result;
 }

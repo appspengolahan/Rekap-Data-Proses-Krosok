@@ -33,15 +33,15 @@ export const ChartModal: React.FC<ChartModalProps> = ({
 
   return (
     <div
-      className="no-print fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/70 backdrop-blur-sm animate-in fade-in duration-200"
+      className="no-print fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-900/75 sm:backdrop-blur-sm animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-3xl shadow-2xl border border-slate-200/90 w-full max-w-5xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200"
+        className="bg-white rounded-3xl shadow-2xl border border-slate-200/90 w-full max-w-5xl overflow-hidden flex flex-col max-h-[90dvh] animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="px-6 py-4.5 border-b border-slate-100 flex items-center justify-between gap-4 bg-slate-50/60">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4.5 border-b border-slate-100 flex items-center justify-between gap-3 sm:gap-4 bg-slate-50/60">
           <div className="flex items-center gap-3 flex-wrap">
             <span className="p-2 rounded-xl bg-blue-50 text-blue-600">
               <Maximize2 className="w-5 h-5" />
@@ -68,7 +68,7 @@ export const ChartModal: React.FC<ChartModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-200/80 hover:bg-slate-300 text-slate-700 text-xs font-bold transition-colors"
+              className="min-h-[44px] lg:min-h-[36px] flex items-center gap-1.5 px-3.5 py-2 lg:py-1.5 rounded-xl bg-slate-200/80 hover:bg-slate-300 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
               title="Tutup (ESC)"
             >
               <Minimize2 className="w-3.5 h-3.5" />

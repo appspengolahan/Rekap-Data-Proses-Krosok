@@ -6,6 +6,34 @@
   --font-dhp: "Public Sans", Arial, Helvetica, sans-serif;
 }
 
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body,
+#root {
+  overscroll-behavior-y: contain;
+}
+
+button,
+[role="button"],
+a,
+select,
+input,
+textarea,
+label {
+  touch-action: manipulation;
+}
+
+@media (max-width: 1023px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 .font-mono {
   font-variant-numeric: tabular-nums;
 }
@@ -75,7 +103,8 @@
     html,
     body,
     #root,
-    .h-screen {
+    .h-screen,
+    .h-\[100dvh\] {
       height: auto !important;
       min-height: 100% !important;
       overflow: visible !important;

@@ -11,6 +11,7 @@ import {
   BookOpen
 } from 'lucide-react';
 import { UserRole, SyncStatus, SwitchAppModule } from '../types';
+import { PWAInstallButton } from './PWAInstallButton';
 
 interface HeaderProps {
   currentRole: UserRole;
@@ -57,7 +58,7 @@ export const Header: React.FC<HeaderProps> = ({
   const roleRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
+    const handleClickOutside = (e: PointerEvent) => {
       if (switchRef.current && !switchRef.current.contains(e.target as Node)) {
         setSwitchOpen(false);
       }
@@ -65,8 +66,8 @@ export const Header: React.FC<HeaderProps> = ({
         setRoleOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('pointerdown', handleClickOutside);
+    return () => document.removeEventListener('pointerdown', handleClickOutside);
   }, []);
 
   const roles: UserRole[] = [
@@ -83,25 +84,26 @@ export const Header: React.FC<HeaderProps> = ({
     currentRole === 'Admin';
 
   return (
-    <header className="no-print sticky top-0 z-40 bg-[#0b1329] text-white border-b border-slate-800/80 px-4 py-2.5 sm:px-6 shadow-md">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+    <header className="no-print sticky top-0 z-40 bg-[#0b1329] text-white border-b border-slate-800/80 px-3 py-2 sm:px-6 shadow-md">
+      <div className="flex items-center justify-between gap-2.5 sm:gap-3 flex-wrap">
         {/* Left Branding / Title with PP1 badge */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1 basis-64">
           <button
             onClick={onToggleMobileMenu}
-            className="md:hidden p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg"
+            className="md:hidden min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-300 hover:text-white hover:bg-slate-800 rounded-xl shrink-0"
             title="Buka Menu"
+            aria-label="Buka Menu"
           >
             <Menu className="w-5 h-5" />
           </button>
 
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-600 text-white flex items-center justify-center font-black text-sm tracking-tighter shadow-md shadow-amber-600/30">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-amber-600 text-white flex items-center justify-center font-black text-sm tracking-tighter shadow-md shadow-amber-600/30 shrink-0">
               PP1
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="text-base sm:text-lg font-bold text-white tracking-tight leading-none">
+                <h1 className="text-sm sm:text-base lg:text-lg font-bold text-white tracking-tight leading-snug truncate">
                   Monitoring Board — Rekap Data Proses Krosok
                 </h1>
               </div>
@@ -141,11 +143,14 @@ export const Header: React.FC<HeaderProps> = ({
             </select>
           </div>
 
+          {/* PWA Install Button (Android/Desktop prompt & iOS Guide) */}
+          <PWAInstallButton />
+
           {/* Role Badge Dropdown */}
           <div className="relative" ref={roleRef}>
             <button
               onClick={() => setRoleOpen(!roleOpen)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 text-xs font-semibold transition-all"
+              className="flex items-center gap-1.5 min-h-[44px] lg:min-h-[34px] px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-750 text-slate-200 border border-slate-700 text-xs font-semibold transition-all"
               title="Ganti Role Hak Akses"
             >
               <Shield className="w-3.5 h-3.5 text-blue-400" />
@@ -154,7 +159,7 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             {roleOpen && (
-              <div className="absolute right-0 mt-1.5 w-60 bg-slate-900 text-white rounded-xl shadow-2xl border border-slate-800 py-1.5 z-50 animate-in fade-in slide-in-from-top-1">
+              <div className="absolute right-0 mt-1.5 w-60 max-w-[calc(100vw-1rem)] max-h-[80dvh] overflow-y-auto bg-slate-900 text-white rounded-xl shadow-2xl border border-slate-800 py-1.5 z-50 animate-in fade-in slide-in-from-top-1">
                 <div className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
                   Pilih Role Pengguna (RBAC)
                 </div>
@@ -165,7 +170,7 @@ export const Header: React.FC<HeaderProps> = ({
                       onRoleChange(role);
                       setRoleOpen(false);
                     }}
-                    className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left transition-colors cursor-pointer ${
+                    className={`w-full flex items-center justify-between min-h-[44px] lg:min-h-[36px] px-3 py-2 text-xs text-left transition-colors cursor-pointer ${
                       currentRole === role
                         ? 'bg-blue-600 text-white font-bold'
                         : 'text-slate-300 hover:bg-slate-800'
@@ -193,7 +198,7 @@ export const Header: React.FC<HeaderProps> = ({
                         setRoleOpen(false);
                         onOpenDevBlueprint();
                       }}
-                      className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-xs font-semibold text-sky-300 hover:text-white bg-sky-950/50 hover:bg-sky-800/60 border border-sky-800/50 transition-colors cursor-pointer"
+                      className="w-full flex items-center gap-2 min-h-[44px] lg:min-h-[36px] px-2.5 py-2 rounded-lg text-xs font-semibold text-sky-300 hover:text-white bg-sky-950/50 hover:bg-sky-800/60 border border-sky-800/50 transition-colors cursor-pointer"
                     >
                       <BookOpen className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                       <span>Panduan Arsitektur (PDF)</span>
@@ -208,7 +213,7 @@ export const Header: React.FC<HeaderProps> = ({
           {onOpenDhpIntegrasi && (
             <button
               onClick={onOpenDhpIntegrasi}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-amber-200 bg-amber-950/60 hover:bg-amber-900/60 border border-amber-700/60 transition-all shadow-xs cursor-pointer"
+              className="flex items-center gap-1.5 min-h-[44px] lg:min-h-[34px] px-2.5 py-1.5 rounded-xl text-xs font-semibold text-amber-200 bg-amber-950/60 hover:bg-amber-900/60 border border-amber-700/60 transition-all shadow-xs cursor-pointer"
               title="Integrasi & Sinkronisasi DHP Krosok"
             >
               <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400/20" />
@@ -226,7 +231,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={onOpenDevBlueprint}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-sky-200 bg-sky-950/60 hover:bg-sky-900/60 border border-sky-700/60 transition-colors shadow-xs cursor-pointer"
+              className="flex items-center gap-1.5 min-h-[44px] lg:min-h-[34px] px-2.5 py-1.5 rounded-xl text-xs font-semibold text-sky-200 bg-sky-950/60 hover:bg-sky-900/60 border border-sky-700/60 transition-colors shadow-xs cursor-pointer"
               title="Panduan Struktur, Kode & Pengamanan Integrasi DHP -> Rekap (Unduh PDF)"
             >
               <BookOpen className="w-3.5 h-3.5 text-sky-400" />
@@ -237,7 +242,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Headless GAS Center Trigger */}
           <button
             onClick={onOpenGasCenter}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 min-h-[44px] lg:min-h-[34px] px-2.5 py-1.5 rounded-xl text-xs font-medium text-slate-300 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors cursor-pointer"
             title="Pengaturan Headless GAS REST API"
           >
             <Database className="w-3.5 h-3.5 text-indigo-400" />
@@ -248,7 +253,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="relative" ref={switchRef}>
             <button
               onClick={() => setSwitchOpen(!switchOpen)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors shadow-xs"
+              className="flex items-center gap-1.5 min-h-[44px] lg:min-h-[34px] px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors shadow-xs"
               title="Pindah ke Monitoring Board lain atau buka Switch App Board"
             >
               <Layers className="w-3.5 h-3.5 text-blue-400" />
@@ -257,7 +262,7 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             {switchOpen && (
-              <div className="absolute right-0 mt-1.5 w-72 bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-800 py-2 z-50 animate-in fade-in slide-in-from-top-1 max-h-[80vh] overflow-y-auto">
+              <div className="absolute right-0 mt-1.5 w-72 max-w-[calc(100vw-1rem)] bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-800 py-2 z-50 animate-in fade-in slide-in-from-top-1 max-h-[80dvh] overflow-y-auto">
                 <div className="px-3 py-1 flex items-center justify-between border-b border-slate-800 pb-2 mb-1">
                   <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
                     Switch App Board PP1
@@ -298,7 +303,7 @@ export const Header: React.FC<HeaderProps> = ({
                             href={app.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center justify-between px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors group"
+                            className="flex items-center justify-between min-h-[44px] lg:min-h-[36px] px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors group"
                             title={app.description || app.url}
                           >
                             <span className="truncate pr-2 group-hover:translate-x-0.5 transition-transform">
@@ -319,7 +324,7 @@ export const Header: React.FC<HeaderProps> = ({
                       setSwitchOpen(false);
                       onOpenSwitchAppTab();
                     }}
-                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 transition-all"
+                    className="w-full flex items-center justify-center gap-1.5 min-h-[44px] lg:min-h-[36px] px-3 py-2 text-xs font-semibold rounded-xl bg-blue-600/20 hover:bg-blue-600 text-blue-300 hover:text-white border border-blue-500/30 transition-all"
                   >
                     <Layers className="w-3.5 h-3.5" />
                     <span>Kelola & Buka Switch App Board</span>
@@ -332,8 +337,9 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Help Modal Trigger */}
           <button
             onClick={onOpenHelp}
-            className="w-8 h-8 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold text-xs border border-slate-700 transition-colors"
+            className="min-w-[44px] min-h-[44px] lg:min-w-[34px] lg:min-h-[34px] rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center font-bold text-xs border border-slate-700 transition-colors"
             title="Bantuan & Petunjuk Penggunaan"
+            aria-label="Bantuan"
           >
             <HelpCircle className="w-4 h-4" />
           </button>

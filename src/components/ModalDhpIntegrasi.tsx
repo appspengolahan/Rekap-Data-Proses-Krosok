@@ -1057,8 +1057,8 @@ function doPost(e) {
   };
 
   return (
-    <div className="dhp-integrasi-typography fixed inset-0 z-50 flex items-center justify-center p-1 sm:p-1.5 bg-slate-900/60 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-slate-200 w-full max-w-[98vw] 2xl:max-w-[1800px] overflow-hidden flex flex-col max-h-[98dvh] sm:max-h-[98vh]">
+    <div className="dhp-integrasi-typography fixed inset-0 z-50 flex items-center justify-center p-1 sm:p-1.5 bg-slate-900/75 sm:backdrop-blur-xs animate-in fade-in">
+      <div className="bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-slate-200 w-full max-w-[98vw] 2xl:max-w-[1800px] overflow-hidden flex flex-col max-h-[98dvh] sm:max-h-[96dvh]">
         {/* Header - Wide Single-Row on Desktop with Live Sheet Route */}
         <div className="px-3.5 sm:px-5 py-1.5 sm:py-2 border-b border-slate-800 flex items-center justify-between gap-2 sm:gap-3 bg-gradient-to-r from-slate-900 via-slate-850 to-indigo-950 text-white shrink-0">
           <div className="flex items-center gap-2 sm:gap-2.5 min-w-0 flex-1">
@@ -1108,7 +1108,7 @@ function doPost(e) {
           <button
             onClick={onClose}
             aria-label="Tutup modal"
-            className="min-h-[34px] min-w-[34px] sm:min-h-0 sm:min-w-0 p-1 inline-flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
+            className="min-h-[44px] min-w-[44px] sm:min-h-[36px] sm:min-w-[36px] p-1 inline-flex items-center justify-center rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors shrink-0 cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -2474,11 +2474,11 @@ function doPost(e) {
               {/* MOBILE & TABLET BOTTOM-SHEET / MODAL DIAGNOSA KILAT (< 1024px Touch-Friendly) */}
               {diagPopover && (
                 <div
-                  className="lg:hidden fixed inset-0 z-[78] flex items-end sm:items-center justify-center p-2.5 sm:p-4 bg-slate-950/60 backdrop-blur-xs"
+                  className="lg:hidden fixed inset-0 z-[78] flex items-end sm:items-center justify-center p-2.5 sm:p-4 bg-slate-950/75 sm:backdrop-blur-xs"
                   onClick={() => setDiagPopover(null)}
                 >
                   <div
-                    className="w-full max-w-md rounded-2xl bg-slate-900 text-white shadow-2xl border border-slate-700 p-4 space-y-3 text-xs"
+                    className="w-full max-w-md max-h-[90dvh] overflow-y-auto rounded-2xl bg-slate-900 text-white shadow-2xl border border-slate-700 p-4 space-y-3 text-xs pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-4"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="flex items-start justify-between gap-2 border-b border-slate-800 pb-2.5">
@@ -2510,7 +2510,7 @@ function doPost(e) {
                         type="button"
                         onClick={() => setDiagPopover(null)}
                         aria-label="Tutup diagnosa"
-                        className="min-h-[36px] min-w-[36px] inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer shrink-0"
+                        className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer shrink-0"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -2653,9 +2653,9 @@ function doPost(e) {
 
           {/* SHARED MODAL POPOVER QUICK TAG LAPANGAN (MANDOR — ACCESSIBLE IN PREVIEW & ANALISIS HARIAN) */}
           {tagEditorTarget && (
-            <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-950/50 backdrop-blur-xs">
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-5 space-y-4">
-                <div className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3">
+            <div className="fixed inset-0 z-[80] flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 sm:backdrop-blur-xs">
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full max-h-[90dvh] flex flex-col overflow-hidden">
+                <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 pt-4 pb-3 shrink-0">
                   <div>
                     <div className="text-[11px] font-semibold text-blue-600">
                       Quick Tag Lapangan — Kontrol Harian Mandor
@@ -2673,11 +2673,14 @@ function doPost(e) {
                   <button
                     type="button"
                     onClick={() => setTagEditorTarget(null)}
-                    className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+                    aria-label="Tutup editor tag lapangan"
+                    className="min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0 inline-flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer shrink-0"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
+
+                <div className="p-5 overflow-y-auto space-y-4 flex-1">
 
                 <div className="space-y-3 text-xs">
                   <div>
@@ -2692,7 +2695,7 @@ function doPost(e) {
                             key={tagOpt}
                             type="button"
                             onClick={() => toggleDraftTag(tagOpt)}
-                            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
+                            className={`min-h-[40px] lg:min-h-[32px] px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors cursor-pointer ${
                               active
                                 ? 'bg-blue-600 text-white border-blue-600'
                                 : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
@@ -2718,15 +2721,16 @@ function doPost(e) {
                     />
                   </div>
                 </div>
+                </div>
 
-                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                <div className="px-5 py-3 flex items-center justify-between border-t border-slate-100 bg-slate-50/50 shrink-0 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3">
                   <button
                     type="button"
                     onClick={() => {
                       setDraftTags([]);
                       setDraftCatatan('');
                     }}
-                    className="text-xs font-semibold text-rose-600 hover:underline cursor-pointer"
+                    className="min-h-[44px] lg:min-h-[34px] px-2 text-xs font-semibold text-rose-600 hover:underline cursor-pointer"
                   >
                     Reset Pilihan
                   </button>
@@ -2734,14 +2738,14 @@ function doPost(e) {
                     <button
                       type="button"
                       onClick={() => setTagEditorTarget(null)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                      className="min-h-[44px] lg:min-h-[34px] px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 cursor-pointer"
                     >
                       Batal
                     </button>
                     <button
                       type="button"
                       onClick={handleSaveQuickTag}
-                      className="px-4 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
+                      className="min-h-[44px] lg:min-h-[34px] px-4 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white cursor-pointer"
                     >
                       Simpan Tag Lapangan
                     </button>

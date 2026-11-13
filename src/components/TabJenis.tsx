@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Layers, FileText, TrendingUp, Search, Maximize2 } from 'lucide-react';
 import { RekapGroup, TrendJenisData, FilterOptions } from '../types';
-import { formatNum, formatPct, getPctClass } from '../services/dataService';
+import { formatInt, formatNum, formatPct, getPctClass } from '../services/dataService';
 import { InteractiveLineChart } from './charts/InteractiveLineChart';
 import { ChartModal } from './ChartModal';
 
@@ -58,7 +58,7 @@ export const TabJenis: React.FC<TabJenisProps> = ({
           </span>
           <button
             onClick={onScrollToPeriodePicker}
-            className="no-print text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 hover:underline ml-1"
+            className="no-print min-h-[44px] lg:min-h-[32px] text-xs text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 hover:underline ml-1"
           >
             <span>⚙️ Atur rentang periode di atas ↑</span>
           </button>
@@ -66,7 +66,7 @@ export const TabJenis: React.FC<TabJenisProps> = ({
 
         <button
           onClick={onExportTabPdf}
-          className="no-print inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors border border-slate-200 ml-auto"
+          className="no-print inline-flex items-center gap-1.5 min-h-[44px] lg:min-h-[34px] px-3 py-1.5 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors border border-slate-200 ml-auto"
         >
           <FileText className="w-3.5 h-3.5 text-blue-600" />
           <span>Export Tab Ini (PDF)</span>
@@ -93,11 +93,11 @@ export const TabJenis: React.FC<TabJenisProps> = ({
                 </p>
               </div>
 
-              <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
                 <select
                   value={selectedJenisKrosok}
                   onChange={(e) => onJenisKrosokChange(e.target.value)}
-                  className="text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl px-2.5 py-1 max-w-[190px] truncate focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  className="min-h-[44px] lg:min-h-[34px] text-xs font-semibold bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl px-2.5 py-1 max-w-[200px] sm:max-w-[220px] truncate focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                 >
                   {filterOptions.jenisKrosok.map((j) => (
                     <option key={j} value={j}>
@@ -108,7 +108,7 @@ export const TabJenis: React.FC<TabJenisProps> = ({
 
                 <button
                   onClick={() => setMaximizedChart('trend')}
-                  className="no-print inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-colors"
+                  className="no-print inline-flex items-center gap-1 min-h-[36px] px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 transition-colors"
                 >
                   <Maximize2 className="w-3 h-3" />
                   <span>Perbesar</span>
@@ -237,14 +237,14 @@ export const TabJenis: React.FC<TabJenisProps> = ({
           </div>
 
           {/* Table Search Input */}
-          <div className="no-print relative">
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+          <div className="no-print relative w-full sm:w-56">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Cari varian krosok..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="text-xs pl-8 pr-3 py-1.5 rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none w-52"
+              className="w-full min-h-[44px] lg:min-h-[34px] text-xs pl-9 pr-3 py-1.5 rounded-xl border border-slate-300 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
             />
           </div>
         </div>
@@ -291,7 +291,7 @@ export const TabJenis: React.FC<TabJenisProps> = ({
                       )}
                     </td>
                     <td className="py-2.5 px-3 text-right font-medium">
-                      {r.jumlahData.toLocaleString('id-ID')}
+                      {formatInt(r.jumlahData)}
                     </td>
                     <td className="py-2.5 px-3 text-right font-semibold text-slate-900">
                       {formatNum(r.baku)}
@@ -330,7 +330,7 @@ export const TabJenis: React.FC<TabJenisProps> = ({
                 <tr className="bg-slate-100/90 font-bold text-slate-900 border-t-2 border-slate-300">
                   <td className="py-3 px-4">TOTAL KESELURUHAN</td>
                   <td className="py-3 px-3 text-right">
-                    {totalCount.toLocaleString('id-ID')}
+                    {formatInt(totalCount)}
                   </td>
                   <td className="py-3 px-3 text-right">{formatNum(totalBaku)}</td>
                   <td className="py-3 px-3 text-right text-emerald-900">{formatNum(totalHasil)}</td>

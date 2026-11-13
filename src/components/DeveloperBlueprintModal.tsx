@@ -63,8 +63,8 @@ export const DeveloperBlueprintModal: React.FC<DeveloperBlueprintModalProps> = (
   };
 
   return (
-    <div className="no-print fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in">
-      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-6xl overflow-hidden flex flex-col max-h-[94dvh] sm:max-h-[92vh]">
+    <div className="no-print fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/75 sm:backdrop-blur-xs animate-in fade-in">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-6xl overflow-hidden flex flex-col max-h-[94dvh] sm:max-h-[92dvh]">
         {/* Header */}
         <div className="px-4 sm:px-6 py-3.5 bg-[#0b1329] text-white border-b border-slate-800 flex items-start sm:items-center justify-between gap-4 shrink-0">
           <div className="flex items-start sm:items-center gap-3 min-w-0">
@@ -91,7 +91,7 @@ export const DeveloperBlueprintModal: React.FC<DeveloperBlueprintModalProps> = (
             type="button"
             onClick={onClose}
             aria-label="Tutup panduan arsitektur"
-            className="min-h-[36px] min-w-[36px] inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+            className="min-h-[44px] min-w-[44px] lg:min-h-[36px] lg:min-w-[36px] inline-flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
           >
             <X className="w-4 h-4" />
           </button>

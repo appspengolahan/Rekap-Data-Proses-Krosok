@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { formatNum } from '../../services/dataService';
+import { formatInt, formatNum } from '../../services/dataService';
 
 interface DualBarItem {
   label: string;
@@ -115,7 +115,7 @@ export const DualBarChart: React.FC<DualBarChartProps> = ({
                 textAnchor="end"
                 className="text-[10px] fill-slate-400 font-medium"
               >
-                {Math.round(g.val).toLocaleString('id-ID')}
+                {formatInt(Math.round(g.val))}
               </text>
             </g>
           ))}
@@ -140,6 +140,7 @@ export const DualBarChart: React.FC<DualBarChartProps> = ({
                 key={idx}
                 onMouseEnter={() => setHoveredIdx(idx)}
                 onMouseLeave={() => setHoveredIdx(null)}
+                onClick={() => setHoveredIdx(hoveredIdx === idx ? null : idx)}
                 className="cursor-pointer"
               >
                 {/* Background hover highlight */}
@@ -219,7 +220,7 @@ export const DualBarChart: React.FC<DualBarChartProps> = ({
 
         {/* Floating Tooltip when hovered */}
         {hoveredIdx !== null && data[hoveredIdx] && (
-          <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-slate-900/90 backdrop-blur-xs text-white text-xs px-3.5 py-2 rounded-xl shadow-2xl pointer-events-none flex items-center gap-3 border border-slate-700">
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 bg-slate-900/95 sm:backdrop-blur-xs text-white text-xs px-3.5 py-2 rounded-xl shadow-2xl pointer-events-none flex items-center gap-3 border border-slate-700 max-w-[95%] flex-wrap justify-center">
             <span className="font-bold text-slate-300">{data[hoveredIdx].label}:</span>
             <span className="text-blue-300 font-semibold">
               Baku: {formatNum(data[hoveredIdx].series1)} Kg

@@ -34,7 +34,11 @@ const LEGACY_WEATHER_KEYS = [
   'krosok_weather_cache_v1_madura'
 ];
 
+let legacyPurgeDone = false;
+
 function purgeLegacyWeatherCache(): void {
+  if (legacyPurgeDone) return;
+  legacyPurgeDone = true;
   try {
     for (const k of LEGACY_WEATHER_KEYS) {
       localStorage.removeItem(k);
@@ -288,6 +292,20 @@ export async function fetchFactoryWeather(
   }
 }
 
+const hourlyIndexCache = new WeakMap<HourlyWeatherPoint[], Map<string, HourlyWeatherPoint>>();
+
+function getHourlyIndex(hourly: HourlyWeatherPoint[]): Map<string, HourlyWeatherPoint> {
+  let map = hourlyIndexCache.get(hourly);
+  if (!map) {
+    map = new Map<string, HourlyWeatherPoint>();
+    for (let i = 0; i < hourly.length; i++) {
+      map.set(hourly[i].timeIso, hourly[i]);
+    }
+    hourlyIndexCache.set(hourly, map);
+  }
+  return map;
+}
+
 /**
  * Matches exact processing hour from DHP `waktu` (e.g. "14:52 - 14:53" or " - 9:34")
  * strictly against real Open-Meteo hourly history/forecast for that exact batch date.
@@ -313,6 +331,5 @@ export function getBatchHourlyWeather(
   }
 
   const targetKey = `${tanggalIso}T${String(targetHour).padStart(2, '0')}:00`;
-  const exact = weatherData.hourly.find((h) => h.timeIso === targetKey);
-  return exact || null;
+  return getHourlyIndex(weatherData.hourly).get(targetKey) || null;
 }

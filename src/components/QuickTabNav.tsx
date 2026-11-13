@@ -38,8 +38,8 @@ export const QuickTabNav: React.FC<QuickTabNavProps> = ({
   ];
 
   return (
-    <nav className="no-print fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-2 py-1.5 md:hidden shadow-lg">
-      <div className="flex items-center justify-around gap-1 max-w-lg mx-auto">
+    <nav className="no-print fixed bottom-0 left-0 right-0 z-40 bg-white/98 border-t border-slate-200 px-1.5 pt-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] md:hidden shadow-lg">
+      <div className="flex items-center justify-around gap-1 max-w-xl mx-auto">
         {items.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -47,14 +47,14 @@ export const QuickTabNav: React.FC<QuickTabNavProps> = ({
             <button
               key={item.id}
               onClick={() => onTabChange(item.id)}
-              className={`flex flex-col items-center justify-center flex-1 py-1 px-1 rounded-xl transition-all ${
+              className={`flex flex-col items-center justify-center flex-1 min-h-[44px] py-1.5 px-1 rounded-xl transition-colors ${
                 isActive
-                  ? 'text-blue-600 font-bold bg-blue-50/80 scale-105'
+                  ? 'text-blue-600 font-bold bg-blue-50/90'
                   : 'text-slate-500 hover:text-slate-900 font-medium'
               }`}
             >
               <Icon className={`w-5 h-5 ${isActive ? 'text-blue-600' : 'text-slate-500'}`} />
-              <span className="text-[10px] mt-0.5 tracking-tight">{item.label}</span>
+              <span className="text-[10px] mt-0.5 tracking-tight truncate max-w-full">{item.label}</span>
             </button>
           );
         })}

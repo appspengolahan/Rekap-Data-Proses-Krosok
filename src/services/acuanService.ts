@@ -72,22 +72,41 @@ export function makeBatchNoteKey(
   return `${tanggal}_${normalizeVariantName(jenisKrosok)}_${Number(baku || 0).toFixed(1)}`;
 }
 
+let _baselineMetaRaw: string | null | undefined = undefined;
+let _baselineMetaVal: BaselineConfigMeta | null = null;
+let _batchNotesRaw: string | null | undefined = undefined;
+let _batchNotesVal: Record<string, BatchFieldNote> | null = null;
+let _signatoriesRaw: string | null | undefined = undefined;
+let _signatoriesVal: ExecutiveSignatories | null = null;
+let _standarListRaw: string | null | undefined = undefined;
+let _standarListVal: KrosokStandarAcuan[] | null = null;
+
 export function loadBaselineMeta(): BaselineConfigMeta {
   try {
     const raw = localStorage.getItem(ACUAN_STORAGE_KEYS.BASELINE_META);
+    if (_baselineMetaVal && raw === _baselineMetaRaw) {
+      return _baselineMetaVal;
+    }
+    _baselineMetaRaw = raw;
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { ...DEFAULT_BASELINE_META, ...parsed };
+      const merged: BaselineConfigMeta = { ...DEFAULT_BASELINE_META, ...parsed };
+      _baselineMetaVal = merged;
+      return merged;
     }
   } catch {
     // ignore
   }
+  _baselineMetaVal = DEFAULT_BASELINE_META;
   return DEFAULT_BASELINE_META;
 }
 
 export function saveBaselineMeta(meta: BaselineConfigMeta): void {
+  _baselineMetaVal = meta;
   try {
-    localStorage.setItem(ACUAN_STORAGE_KEYS.BASELINE_META, JSON.stringify(meta));
+    const raw = JSON.stringify(meta);
+    localStorage.setItem(ACUAN_STORAGE_KEYS.BASELINE_META, raw);
+    _baselineMetaRaw = raw;
   } catch {
     // ignore
   }
@@ -96,21 +115,29 @@ export function saveBaselineMeta(meta: BaselineConfigMeta): void {
 export function loadBatchNotes(): Record<string, BatchFieldNote> {
   try {
     const raw = localStorage.getItem(ACUAN_STORAGE_KEYS.BATCH_NOTES);
+    if (_batchNotesVal && raw === _batchNotesRaw) {
+      return _batchNotesVal;
+    }
+    _batchNotesRaw = raw;
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === 'object') return parsed;
+      if (parsed && typeof parsed === 'object') {
+        _batchNotesVal = parsed;
+        return parsed;
+      }
     }
   } catch {
     // ignore
   }
-  return {};
+  _batchNotesVal = {};
+  return _batchNotesVal;
 }
 
 export function saveBatchNote(
   note: BatchFieldNote,
   existingMap?: Record<string, BatchFieldNote>
 ): Record<string, BatchFieldNote> {
-  const current = existingMap ? { ...existingMap } : loadBatchNotes();
+  const current = existingMap ? { ...existingMap } : { ...loadBatchNotes() };
   if (note.tags.length === 0 && !note.catatan.trim()) {
     delete current[note.batchKey];
   } else {
@@ -119,8 +146,11 @@ export function saveBatchNote(
       updatedAt: new Date().toISOString()
     };
   }
+  _batchNotesVal = current;
   try {
-    localStorage.setItem(ACUAN_STORAGE_KEYS.BATCH_NOTES, JSON.stringify(current));
+    const raw = JSON.stringify(current);
+    localStorage.setItem(ACUAN_STORAGE_KEYS.BATCH_NOTES, raw);
+    _batchNotesRaw = raw;
   } catch {
     // ignore
   }
@@ -130,18 +160,28 @@ export function saveBatchNote(
 export function loadSignatories(): ExecutiveSignatories {
   try {
     const raw = localStorage.getItem(ACUAN_STORAGE_KEYS.SIGNATORIES);
+    if (_signatoriesVal && raw === _signatoriesRaw) {
+      return _signatoriesVal;
+    }
+    _signatoriesRaw = raw;
     if (raw) {
-      return { ...DEFAULT_SIGNATORIES, ...JSON.parse(raw) };
+      const merged: ExecutiveSignatories = { ...DEFAULT_SIGNATORIES, ...JSON.parse(raw) };
+      _signatoriesVal = merged;
+      return merged;
     }
   } catch {
     // ignore
   }
+  _signatoriesVal = DEFAULT_SIGNATORIES;
   return DEFAULT_SIGNATORIES;
 }
 
 export function saveSignatories(sig: ExecutiveSignatories): void {
+  _signatoriesVal = sig;
   try {
-    localStorage.setItem(ACUAN_STORAGE_KEYS.SIGNATORIES, JSON.stringify(sig));
+    const raw = JSON.stringify(sig);
+    localStorage.setItem(ACUAN_STORAGE_KEYS.SIGNATORIES, raw);
+    _signatoriesRaw = raw;
   } catch {
     // ignore
   }
@@ -256,7 +296,7 @@ export function calculateBaselineFromPeriod(
       avgGagangPct,
       avgDebuAirPct,
       avgBatchBakuKg,
-      keterangan: `Rata-rata tertimbang ${g.batchCount} batch (${Math.round(g.baku).toLocaleString('id-ID')} Kg) periode ${labelPeriode}`,
+      keterangan: `Rata-rata tertimbang ${g.batchCount} batch (${ID_INT_FMT.format(Math.round(g.baku))} Kg) periode ${labelPeriode}`,
       updatedAt: todayIso
     });
   });
@@ -281,7 +321,7 @@ export function calculateBaselineFromPeriod(
       avgGagangPct: round2((sumGagangAll / sumBakuAll) * 100),
       avgDebuAirPct: round2((sumDebuAirAll / sumBakuAll) * 100),
       avgBatchBakuKg: round2(sumBakuAll / Math.max(1, sourceRows.length)),
-      keterangan: `Acuan agregat seluruh krosok (${sourceRows.length} batch, ${Math.round(sumBakuAll).toLocaleString('id-ID')} Kg) periode ${labelPeriode}`,
+      keterangan: `Acuan agregat seluruh krosok (${sourceRows.length} batch, ${ID_INT_FMT.format(Math.round(sumBakuAll))} Kg) periode ${labelPeriode}`,
       updatedAt: todayIso
     });
   }
@@ -292,9 +332,14 @@ export function calculateBaselineFromPeriod(
 export function loadStandarAcuanList(records: KrosokRecord[]): KrosokStandarAcuan[] {
   try {
     const raw = localStorage.getItem(ACUAN_STORAGE_KEYS.STANDAR_LIST);
+    if (_standarListVal && raw === _standarListRaw) {
+      return _standarListVal;
+    }
+    _standarListRaw = raw;
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
+        _standarListVal = parsed;
         return parsed;
       }
     }
@@ -316,8 +361,11 @@ export function loadStandarAcuanList(records: KrosokRecord[]): KrosokStandarAcua
 }
 
 export function saveStandarAcuanList(list: KrosokStandarAcuan[]): void {
+  _standarListVal = list;
   try {
-    localStorage.setItem(ACUAN_STORAGE_KEYS.STANDAR_LIST, JSON.stringify(list));
+    const raw = JSON.stringify(list);
+    localStorage.setItem(ACUAN_STORAGE_KEYS.STANDAR_LIST, raw);
+    _standarListRaw = raw;
   } catch {
     // ignore
   }
@@ -1020,16 +1068,20 @@ export function computeEvaluasiBulananKrosok(params: {
   };
 }
 
+const ID_INT_FMT = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 });
+const ID_NUM_FMT = new Intl.NumberFormat('id-ID', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1
+});
+const ID_PCT_FMT = new Intl.NumberFormat('id-ID', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
+});
+
 function formatIdNum(n: number): string {
-  return Number(n || 0).toLocaleString('id-ID', {
-    minimumFractionDigits: 1,
-    maximumFractionDigits: 1
-  });
+  return ID_NUM_FMT.format(Number(n || 0));
 }
 
 function formatIdPct(n: number): string {
-  return Number(n || 0).toLocaleString('id-ID', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  });
+  return ID_PCT_FMT.format(Number(n || 0));
 }
