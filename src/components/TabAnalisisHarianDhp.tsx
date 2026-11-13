@@ -26,7 +26,7 @@ import {
   KrosokStandarAcuan,
   TacticalBatchEvaluation
 } from '../types';
-import { formatNum, formatPct, round2 } from '../services/dataService';
+import { formatNum, formatPct, formatWibHHMM, round2 } from '../services/dataService';
 import {
   diagnoseKrosokDeviation,
   evaluateDhpBatch,
@@ -512,17 +512,8 @@ export const TabAnalisisHarianDhp: React.FC<TabAnalisisHarianDhpProps> = ({
 
   const fetchedTimeWib = useMemo(() => {
     if (!weatherData?.fetchedAt) return '';
-    try {
-      const d = new Date(weatherData.fetchedAt);
-      if (isNaN(d.getTime())) return '';
-      return `${new Intl.DateTimeFormat('id-ID', {
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'Asia/Jakarta'
-      }).format(d)} WIB`;
-    } catch {
-      return '';
-    }
+    const formatted = formatWibHHMM(weatherData.fetchedAt);
+    return formatted ? `${formatted} WIB` : '';
   }, [weatherData?.fetchedAt]);
 
   const hygroCardTheme = useMemo(() => {

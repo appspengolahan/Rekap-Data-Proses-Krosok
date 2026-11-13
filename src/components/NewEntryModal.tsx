@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X, PlusCircle, Scale, Sparkles, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { KrosokRecord, FilterOptions } from '../types';
-import { formatNum, formatPct, round2, MONTH_ORDER, postToGASWithFallback } from '../services/dataService';
+import { formatNum, formatPct, round2, MONTH_ORDER, postToGASWithFallback, getTodayWibIso } from '../services/dataService';
 
 interface NewEntryModalProps {
   isOpen: boolean;
@@ -18,7 +18,7 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({
   filterOptions,
   gasUrl
 }) => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayWibIso();
 
   const [tanggal, setTanggal] = useState(today);
   const [jenisKrosok, setJenisKrosok] = useState(filterOptions.jenisKrosok[0] || 'Zambia M1L (2023)');
@@ -52,10 +52,12 @@ export const NewEntryModal: React.FC<NewEntryModalProps> = ({
 
     setSubmitting(true);
 
-    const d = new Date(tanggal);
-    const bln = MONTH_ORDER[d.getMonth()] || 'Oktober';
-    const thn = String(d.getFullYear());
-    const display = `${d.getDate()} ${bln} ${thn}`;
+    const [yStr, mStr, dStr] = tanggal.split('-');
+    const mIdx = parseInt(mStr, 10) - 1;
+    const dayNum = parseInt(dStr, 10);
+    const bln = MONTH_ORDER[mIdx] || 'Oktober';
+    const thn = yStr || String(new Date().getFullYear());
+    const display = `${isNaN(dayNum) ? dStr : dayNum} ${bln} ${thn}`;
     const selectedKrosokName = jenisKrosok === '__custom__' ? customJenis.trim() : jenisKrosok;
 
     const newRec: KrosokRecord = {

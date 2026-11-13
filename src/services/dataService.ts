@@ -90,131 +90,369 @@ export function getPctClass(v: number): string {
   return 'text-slate-700';
 }
 
+const WIB_OFFSET_MS = 7 * 60 * 60 * 1000;
+const STATIC_HOSTING_CACHE_KEY = 'krosok_static_hosting_mode_v1';
+let staticHostingModeDetected = false;
+
+export function isStaticHostingMode(): boolean {
+  if (staticHostingModeDetected) return true;
+  try {
+    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(STATIC_HOSTING_CACHE_KEY) === '1') {
+      staticHostingModeDetected = true;
+      return true;
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return false;
+}
+
+export function markStaticHostingMode(): void {
+  staticHostingModeDetected = true;
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(STATIC_HOSTING_CACHE_KEY, '1');
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function getWibDateParts(input?: Date | number | string): {
+  year: number;
+  monthIdx: number;
+  day: number;
+  hours: number;
+  minutes: number;
+  seconds: number;
+  iso: string;
+} {
+  let baseMs: number;
+  if (input === undefined || input === null) {
+    baseMs = Date.now();
+  } else if (typeof input === 'number') {
+    baseMs = input;
+  } else if (input instanceof Date) {
+    baseMs = input.getTime();
+  } else {
+    const parsed = Date.parse(String(input));
+    baseMs = isNaN(parsed) ? Date.now() : parsed;
+  }
+  const shifted = new Date(baseMs + WIB_OFFSET_MS);
+  const year = shifted.getUTCFullYear();
+  const monthIdx = shifted.getUTCMonth();
+  const day = shifted.getUTCDate();
+  const hours = shifted.getUTCHours();
+  const minutes = shifted.getUTCMinutes();
+  const seconds = shifted.getUTCSeconds();
+  return {
+    year,
+    monthIdx,
+    day,
+    hours,
+    minutes,
+    seconds,
+    iso: `${year}-${String(monthIdx + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+  };
+}
+
+/** Tanggal hari ini dalam zona waktu WIB permanen (UTC+7) format YYYY-MM-DD */
+export function getTodayWibIso(): string {
+  return getWibDateParts().iso;
+}
+
+/** Jam:Menit dalam WIB permanen (UTC+7), tanpa konstruksi Intl.DateTimeFormat berulang */
+export function formatWibHHMM(input?: Date | number | string): string {
+  if (input !== undefined && typeof input === 'string' && isNaN(Date.parse(input))) return '';
+  const p = getWibDateParts(input);
+  return `${String(p.hours).padStart(2, '0')}:${String(p.minutes).padStart(2, '0')}`;
+}
+
+/** Jam:Menit:Detik dalam WIB permanen (UTC+7) */
+export function formatWibHHMMSS(input?: Date | number | string): string {
+  const p = getWibDateParts(input);
+  return `${String(p.hours).padStart(2, '0')}:${String(p.minutes).padStart(2, '0')}:${String(p.seconds).padStart(2, '0')}`;
+}
+
+/** Tanggal panjang Bahasa Indonesia dalam WIB permanen (UTC+7) tanpa membuat Intl.DateTimeFormat */
+export function formatWibLongDate(input?: Date | number | string, padDay: boolean = false): string {
+  const p = getWibDateParts(input);
+  const dStr = padDay ? String(p.day).padStart(2, '0') : String(p.day);
+  return `${dStr} ${MONTH_ORDER[p.monthIdx] || 'Oktober'} ${p.year}`;
+}
+
 function monthKey(tahun: string | number, bulan: string): number {
   return Number(tahun) * 12 + MONTH_ORDER.indexOf(bulan);
 }
 
-/** Parses Google Visualization query Date string e.g. "Date(2025,10,12)" or string date */
+/** Parses Google Visualization query Date string e.g. "Date(2025,10,12)" or ISO/Date using permanent WIB (UTC+7) arithmetic */
 function parseGvizDate(v: any): { iso: string; display: string; bulan: string; tahun: string } {
   if (typeof v === 'string' && v.startsWith('Date(')) {
     const parts = v.replace('Date(', '').replace(')', '').split(',').map(s => parseInt(s.trim(), 10));
     const year = parts[0];
     const month = parts[1]; // 0-indexed in JS/Gviz
     const day = parts[2];
-    const d = new Date(year, month, day);
-    const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const display = `${day} ${MONTH_ORDER[month]} ${year}`;
-    return {
-      iso,
-      display,
-      bulan: MONTH_ORDER[month],
-      tahun: String(year)
-    };
+    if (!isNaN(year) && !isNaN(month) && !isNaN(day) && month >= 0 && month <= 11) {
+      const monthName = MONTH_ORDER[month] || 'Oktober';
+      const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      return {
+        iso,
+        display: `${day} ${monthName} ${year}`,
+        bulan: monthName,
+        tahun: String(year)
+      };
+    }
   }
-  
-  if (v instanceof Date) {
-    const year = v.getFullYear();
-    const month = v.getMonth();
-    const day = v.getDate();
+
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    const p = getWibDateParts(v);
+    const monthName = MONTH_ORDER[p.monthIdx] || 'Oktober';
     return {
-      iso: `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
-      display: `${day} ${MONTH_ORDER[month]} ${year}`,
-      bulan: MONTH_ORDER[month],
-      tahun: String(year)
+      iso: p.iso,
+      display: `${p.day} ${monthName} ${p.year}`,
+      bulan: monthName,
+      tahun: String(p.year)
     };
   }
 
-  // fallback to string format
-  const s = String(v || '');
+  const s = String(v || '').trim();
+  const isoMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const year = isoMatch[1];
+    const mIdx = parseInt(isoMatch[2], 10) - 1;
+    const day = parseInt(isoMatch[3], 10);
+    const monthName = MONTH_ORDER[mIdx] || 'Oktober';
+    return {
+      iso: `${year}-${isoMatch[2]}-${isoMatch[3]}`,
+      display: `${day} ${monthName} ${year}`,
+      bulan: monthName,
+      tahun: year
+    };
+  }
+
+  const idSlashMatch = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (idSlashMatch) {
+    const day = parseInt(idSlashMatch[1], 10);
+    const month = parseInt(idSlashMatch[2], 10);
+    const year = idSlashMatch[3];
+    const monthName = MONTH_ORDER[month - 1] || 'Oktober';
+    return {
+      iso: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+      display: `${day} ${monthName} ${year}`,
+      bulan: monthName,
+      tahun: year
+    };
+  }
+
+  const wibToday = getWibDateParts();
   return {
     iso: s,
     display: s,
-    bulan: 'Oktober',
-    tahun: '2026'
+    bulan: MONTH_ORDER[wibToday.monthIdx] || 'Oktober',
+    tahun: String(wibToday.year)
   };
 }
 
-/** Fetch data via Google Visualization API query endpoint */
+/** Lightweight RFC-4180 CSV parser for Google Sheets CSV fallback */
+function parseCsvMatrix(csvText: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < csvText.length; i++) {
+    const ch = csvText[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (csvText[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      row.push(field);
+      field = '';
+    } else if (ch === '\r') {
+      // skip CR, handle LF next
+    } else if (ch === '\n') {
+      row.push(field);
+      rows.push(row);
+      row = [];
+      field = '';
+    } else {
+      field += ch;
+    }
+  }
+  if (field.length > 0 || row.length > 0) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows;
+}
+
+function parseLocaleNum(val: string | undefined): number {
+  if (!val) return NaN;
+  const cleaned = val.trim().replace(/\s/g, '');
+  if (!cleaned) return NaN;
+  // Handle Indonesian/US decimals safely
+  if (/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(cleaned)) {
+    return parseFloat(cleaned.replace(/\./g, '').replace(',', '.'));
+  }
+  if (/^-?\d+(,\d+)$/.test(cleaned)) {
+    return parseFloat(cleaned.replace(',', '.'));
+  }
+  return parseFloat(cleaned.replace(/,/g, ''));
+}
+
+/** Fetch data via Google Visualization API query endpoint with automatic Google Sheets CSV fallback */
 export async function fetchFromGviz(spreadsheetId: string, sheetName: string): Promise<KrosokRecord[]> {
   if (!spreadsheetId) return [];
+  const encSheet = encodeURIComponent(sheetName);
+
+  // 1. Primary attempt: Google Visualization JSON
   try {
-    const encSheet = encodeURIComponent(sheetName);
     const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encSheet}`;
-    
     const response = await fetch(url);
-    if (!response.ok) {
-      console.warn(`Google Sheet request notice (Status: ${response.status})`);
-      return [];
-    }
-    
-    const text = await response.text();
-    const start = text.indexOf('{');
-    const end = text.lastIndexOf('}');
-    if (start === -1 || end === -1) {
-      console.warn('Respon Google Sheet bukan JSON valid.');
-      return [];
-    }
-    
-    const json = JSON.parse(text.substring(start, end + 1));
-    const rows = json.table?.rows || [];
-    const records: KrosokRecord[] = [];
+    if (response.ok) {
+      const text = await response.text();
+      const contentType = response.headers.get('content-type') || '';
+      if (!isHtmlResponse(text, contentType) && !text.trim().startsWith('<')) {
+        const start = text.indexOf('{');
+        const end = text.lastIndexOf('}');
+        if (start !== -1 && end > start) {
+          const json = JSON.parse(text.substring(start, end + 1));
+          const rows = json.table?.rows || [];
+          const records: KrosokRecord[] = [];
 
-    for (let i = 0; i < rows.length; i++) {
-      const c = rows[i].c;
-      if (!c) continue;
+          for (let i = 0; i < rows.length; i++) {
+            const c = rows[i].c;
+            if (!c) continue;
 
-      const rawTgl = c[1]?.v;
-      const rawBulan = c[2]?.v;
-      const rawTahun = c[3]?.v;
-      const rawPerlakuan = c[4]?.v;
-      const rawKrosok = c[5]?.v;
-      const rawProses = c[6]?.v;
-      const rawBaku = c[7]?.v;
-      const rawHasil = c[8]?.v;
+            const rawTgl = c[1]?.v;
+            const rawBulan = c[2]?.v;
+            const rawTahun = c[3]?.v;
+            const rawPerlakuan = c[4]?.v;
+            const rawKrosok = c[5]?.v;
+            const rawProses = c[6]?.v;
+            const rawBaku = c[7]?.v;
+            const rawHasil = c[8]?.v;
 
-      // Filter valid data rows: must have Netto Baku > 0 and Netto Hasil as numbers
-      if (
-        rawTgl &&
-        typeof rawBaku === 'number' &&
-        typeof rawHasil === 'number' &&
-        rawBaku > 0
-      ) {
-        const parsedDate = parseGvizDate(rawTgl);
-        const baku = rawBaku;
-        const hasil = rawHasil;
-        const susutKg = typeof c[9]?.v === 'number' ? c[9]?.v : (baku - hasil);
-        const susutPct = typeof c[10]?.v === 'number' ? c[10]?.v : (susutKg / baku * 100);
-        const gagangKg = typeof c[11]?.v === 'number' ? c[11]?.v : 0;
-        const airKg = typeof c[12]?.v === 'number' ? c[12]?.v : 0;
-        const debuKg = typeof c[13]?.v === 'number' ? c[13]?.v : 0;
-        const debuAirKg = airKg + debuKg;
+            if (
+              rawTgl &&
+              typeof rawBaku === 'number' &&
+              typeof rawHasil === 'number' &&
+              rawBaku > 0
+            ) {
+              const parsedDate = parseGvizDate(rawTgl);
+              const baku = rawBaku;
+              const hasil = rawHasil;
+              const susutKg = typeof c[9]?.v === 'number' ? c[9]?.v : (baku - hasil);
+              const susutPct = typeof c[10]?.v === 'number' ? c[10]?.v : (susutKg / baku * 100);
+              const gagangKg = typeof c[11]?.v === 'number' ? c[11]?.v : 0;
+              const airKg = typeof c[12]?.v === 'number' ? c[12]?.v : 0;
+              const debuKg = typeof c[13]?.v === 'number' ? c[13]?.v : 0;
+              const debuAirKg = airKg + debuKg;
 
-        records.push({
-          srcRow: i + 1,
-          tanggal: parsedDate.iso,
-          tanggalDisplay: parsedDate.display,
-          bulan: String(rawBulan || parsedDate.bulan).trim(),
-          tahun: String(rawTahun || parsedDate.tahun).trim(),
-          jenisPerlakuan: rawPerlakuan ? String(rawPerlakuan).trim() : undefined,
-          jenisKrosok: rawKrosok ? String(rawKrosok).trim() : 'Lainnya',
-          jenisProses: rawProses ? String(rawProses).trim() : 'SKT',
-          baku: round2(baku),
-          hasil: round2(hasil),
-          susutKg: round2(susutKg),
-          susutPct: round2(susutPct),
-          gagangKg: round2(gagangKg),
-          gagangPct: round2(baku ? (gagangKg / baku * 100) : 0),
-          airKg: round2(airKg),
-          debuKg: round2(debuKg),
-          debuAirKg: round2(debuAirKg),
-          debuAirPct: round2(baku ? (debuAirKg / baku * 100) : 0),
-        });
+              records.push({
+                srcRow: i + 1,
+                tanggal: parsedDate.iso,
+                tanggalDisplay: parsedDate.display,
+                bulan: String(rawBulan || parsedDate.bulan).trim(),
+                tahun: String(rawTahun || parsedDate.tahun).trim(),
+                jenisPerlakuan: rawPerlakuan ? String(rawPerlakuan).trim() : undefined,
+                jenisKrosok: rawKrosok ? String(rawKrosok).trim() : 'Lainnya',
+                jenisProses: rawProses ? String(rawProses).trim() : 'SKT',
+                baku: round2(baku),
+                hasil: round2(hasil),
+                susutKg: round2(susutKg),
+                susutPct: round2(susutPct),
+                gagangKg: round2(gagangKg),
+                gagangPct: round2(baku ? (gagangKg / baku * 100) : 0),
+                airKg: round2(airKg),
+                debuKg: round2(debuKg),
+                debuAirKg: round2(debuAirKg),
+                debuAirPct: round2(baku ? (debuAirKg / baku * 100) : 0),
+              });
+            }
+          }
+
+          if (records.length > 0) return records;
+        }
       }
     }
+  } catch (err) {
+    console.warn('fetchFromGviz JSON notice, trying CSV fallback:', err);
+  }
 
+  // 2. Fallback: Google Sheets CSV (`!rawText.trim().startsWith('<')`)
+  try {
+    const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encSheet}`;
+    const csvResp = await fetch(csvUrl);
+    if (!csvResp.ok) return [];
+    const csvText = await csvResp.text();
+    const csvContentType = csvResp.headers.get('content-type') || '';
+    if (!csvText.trim() || csvText.trim().startsWith('<') || isHtmlResponse(csvText, csvContentType)) {
+      return [];
+    }
+
+    const matrix = parseCsvMatrix(csvText);
+    const records: KrosokRecord[] = [];
+    for (let i = 0; i < matrix.length; i++) {
+      const c = matrix[i];
+      if (!c || c.length < 9) continue;
+      const rawTgl = c[1]?.trim();
+      const rawBulan = c[2]?.trim();
+      const rawTahun = c[3]?.trim();
+      const rawPerlakuan = c[4]?.trim();
+      const rawKrosok = c[5]?.trim();
+      const rawProses = c[6]?.trim();
+      const baku = parseLocaleNum(c[7]);
+      const hasil = parseLocaleNum(c[8]);
+
+      if (!rawTgl || isNaN(baku) || isNaN(hasil) || baku <= 0 || rawKrosok?.toUpperCase() === 'JENIS KROSOK') {
+        continue;
+      }
+
+      const parsedDate = parseGvizDate(rawTgl);
+      const rawSusut = parseLocaleNum(c[9]);
+      const susutKg = !isNaN(rawSusut) ? rawSusut : (baku - hasil);
+      const rawSusutPct = parseLocaleNum(c[10]);
+      const susutPct = !isNaN(rawSusutPct) ? rawSusutPct : (susutKg / baku * 100);
+      const gagangKg = parseLocaleNum(c[11]) || 0;
+      const airKg = parseLocaleNum(c[12]) || 0;
+      const debuKg = parseLocaleNum(c[13]) || 0;
+      const debuAirKg = airKg + debuKg;
+
+      records.push({
+        srcRow: i + 1,
+        tanggal: parsedDate.iso,
+        tanggalDisplay: parsedDate.display,
+        bulan: rawBulan || parsedDate.bulan,
+        tahun: rawTahun || parsedDate.tahun,
+        jenisPerlakuan: rawPerlakuan || undefined,
+        jenisKrosok: rawKrosok || 'Lainnya',
+        jenisProses: rawProses || 'SKT',
+        baku: round2(baku),
+        hasil: round2(hasil),
+        susutKg: round2(susutKg),
+        susutPct: round2(susutPct),
+        gagangKg: round2(gagangKg),
+        gagangPct: round2(baku ? (gagangKg / baku * 100) : 0),
+        airKg: round2(airKg),
+        debuKg: round2(debuKg),
+        debuAirKg: round2(debuAirKg),
+        debuAirPct: round2(baku ? (debuAirKg / baku * 100) : 0),
+      });
+    }
     return records;
   } catch (err) {
-    console.warn('fetchFromGviz network notice (using offline/cached records):', err);
+    console.warn('fetchFromGviz CSV fallback notice (using offline/cached records):', err);
     return [];
   }
 }
@@ -357,12 +595,15 @@ export function isHtmlResponse(rawText: string, contentType?: string | null): bo
   if (contentType && (contentType.includes('text/html') || contentType.includes('application/xhtml+xml'))) {
     return true;
   }
-  const sample = rawText.trim().slice(0, 150).toLowerCase();
+  const trimmed = rawText.trim();
+  if (!trimmed) return false;
+  const sample = trimmed.slice(0, 150).toLowerCase();
   return (
     sample.startsWith('<!doctype') ||
     sample.startsWith('<html') ||
     sample.startsWith('<head') ||
-    sample.startsWith('<body')
+    sample.startsWith('<body') ||
+    trimmed.startsWith('<')
   );
 }
 
@@ -518,15 +759,28 @@ export async function fetchFromGAS(
     }
   };
 
-  // 1. Percobaan pertama dengan URL yang dikonfigurasi
-  let result = await attemptFetch(primaryUrl);
+  const shouldBypassRelativeProxy =
+    primaryUrl.startsWith('/') || (isStaticHostingMode() && primaryUrl !== DEFAULT_CONFIG.gasUrl);
 
-  // 2. Jika gagal atau mengembalikan HTML, otomatis fallback langsung ke endpoint GAS dengan CORS
-  if (result === null && primaryUrl !== DEFAULT_CONFIG.gasUrl) {
-    console.warn(
-      `[Cloudflare Fallback] Beralih otomatis ke direct fetch endpoint Google Apps Script: ${DEFAULT_CONFIG.gasUrl}`
-    );
-    result = await attemptFetch(DEFAULT_CONFIG.gasUrl);
+  // 1. Jika bukan proxy /api yang sudah terdeteksi mode static hosting, coba URL utama terlebih dahulu
+  let result: KrosokRecord[] | null = null;
+  if (!shouldBypassRelativeProxy) {
+    result = await attemptFetch(primaryUrl);
+    if (result === null && primaryUrl !== DEFAULT_CONFIG.gasUrl) {
+      markStaticHostingMode();
+    }
+  } else if (primaryUrl.startsWith('/')) {
+    markStaticHostingMode();
+  }
+
+  // 2. Jika gagal, mengembalikan HTML, atau mode static hosting aktif, fallback langsung ke endpoint GAS dengan CORS
+  if (result === null) {
+    if (primaryUrl !== DEFAULT_CONFIG.gasUrl) {
+      console.warn(
+        `[Cloudflare Fallback] Beralih otomatis ke direct fetch endpoint Google Apps Script: ${DEFAULT_CONFIG.gasUrl}`
+      );
+      result = await attemptFetch(DEFAULT_CONFIG.gasUrl);
+    }
   }
 
   return result || [];
@@ -534,7 +788,7 @@ export async function fetchFromGAS(
 
 /**
  * Pengiriman POST aman ke GAS dengan fallback otomatis jika rute internal /api proxy
- * mengembalikan HTML atau gagal saat dihosting di Cloudflare.
+ * mengembalikan HTML atau gagal saat dihosting di Cloudflare (plus cache flag mode static hosting).
  */
 export async function postToGASWithFallback(
   gasUrl: string,
@@ -552,6 +806,7 @@ export async function postToGASWithFallback(
       });
       const parsedRes = await safeParseJsonResponse<any>(postRes);
       if (parsedRes.isHtml) {
+        markStaticHostingMode();
         return { isHtml: true, ok: false, error: 'Respons HTML dari proxy' };
       }
       return {
@@ -565,16 +820,27 @@ export async function postToGASWithFallback(
     }
   };
 
-  let res = await attemptPost(primaryUrl);
+  const shouldBypassProxy =
+    primaryUrl.startsWith('/') || (isStaticHostingMode() && primaryUrl !== DEFAULT_CONFIG.gasUrl);
+
+  let res: { isHtml: boolean; ok: boolean; data?: any; error?: string; parseError?: string };
   let isFallback = false;
 
-  // Jika proxy /api mengembalikan HTML atau gagal, lakukan direct fetch ke endpoint GAS resmi
-  if ((res.isHtml || !res.ok) && primaryUrl !== DEFAULT_CONFIG.gasUrl) {
-    console.warn(
-      `[Cloudflare Fallback] POST ke ${primaryUrl} mengembalikan HTML / gagal. Melakukan direct fallback ke ${DEFAULT_CONFIG.gasUrl}`
-    );
+  if (shouldBypassProxy) {
+    markStaticHostingMode();
     res = await attemptPost(DEFAULT_CONFIG.gasUrl);
-    isFallback = true;
+    isFallback = primaryUrl !== DEFAULT_CONFIG.gasUrl;
+  } else {
+    res = await attemptPost(primaryUrl);
+    // Jika proxy /api mengembalikan HTML atau gagal, lakukan direct fetch ke endpoint GAS resmi
+    if ((res.isHtml || !res.ok) && primaryUrl !== DEFAULT_CONFIG.gasUrl) {
+      markStaticHostingMode();
+      console.warn(
+        `[Cloudflare Fallback] POST ke ${primaryUrl} mengembalikan HTML / gagal. Melakukan direct fallback ke ${DEFAULT_CONFIG.gasUrl}`
+      );
+      res = await attemptPost(DEFAULT_CONFIG.gasUrl);
+      isFallback = true;
+    }
   }
 
   if (res.data) {
@@ -774,6 +1040,10 @@ export async function fetchDhpKrosokRecords(
     }
 
     const text = await response.text();
+    const contentType = response.headers.get('content-type') || '';
+    if (isHtmlResponse(text, contentType) || text.trim().startsWith('<')) {
+      return getCachedDhpItems();
+    }
     const start = text.indexOf('{');
     const end = text.lastIndexOf('}');
     if (start === -1 || end === -1) {
@@ -1067,6 +1337,8 @@ export async function fetchRekapActiveDateAudit(
     if (!response.ok) return null;
 
     const text = await response.text();
+    const contentType = response.headers.get('content-type') || '';
+    if (isHtmlResponse(text, contentType) || text.trim().startsWith('<')) return null;
     const start = text.indexOf('{');
     const end = text.lastIndexOf('}');
     if (start === -1 || end === -1) return null;
@@ -1627,7 +1899,7 @@ export function buildDashboardData(
   return {
     filterOptions,
     entriTerkini: getEntriTerkini(records),
-    lastUpdated: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    lastUpdated: formatWibHHMMSS(),
     ringkasanTahunan: computeRingkasan(records, tahun, 'Semua', jenisProses, 'tahunan'),
     ringkasanBulanan: computeRingkasan(records, tahun, bulanRingkasan, jenisProses, 'bulanan'),
     ringkasanPeriode: computeRingkasanPeriode(

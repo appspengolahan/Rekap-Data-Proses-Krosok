@@ -11,7 +11,7 @@ import {
   MonthlyVariantEvaluation,
   TacticalBatchEvaluation
 } from '../types';
-import { MONTH_ORDER, round2 } from './dataService';
+import { getTodayWibIso, MONTH_ORDER, round2 } from './dataService';
 import { getBatchHourlyWeather } from './weatherService';
 
 export const QUICK_TAG_OPTIONS: string[] = [
@@ -222,7 +222,7 @@ export function calculateBaselineFromPeriod(
   });
 
   const sortedGroups = Array.from(groupMap.values()).sort((a, b) => b.baku - a.baku);
-  const todayIso = new Date().toISOString().split('T')[0];
+  const todayIso = getTodayWibIso();
   const result: KrosokStandarAcuan[] = [];
 
   sortedGroups.forEach((g, idx) => {
@@ -378,7 +378,7 @@ export function findStandarForVariant(
     avgDebuAirPct: 0,
     avgBatchBakuKg: 0,
     keterangan: 'Varian baru (belum terdapat riwayat batch pada periode dasar)',
-    updatedAt: new Date().toISOString().split('T')[0]
+    updatedAt: getTodayWibIso()
   };
 }
 

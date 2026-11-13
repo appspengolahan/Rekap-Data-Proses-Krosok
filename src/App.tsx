@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   KrosokRecord,
   DashboardData,
@@ -163,14 +163,20 @@ export default function App() {
     saveSwitchApps(newApps);
   };
 
+  const recordsRef = useRef<KrosokRecord[]>(records);
+  const configRef = useRef<GASConfig>(config);
+  recordsRef.current = records;
+  configRef.current = config;
+
   // Refresh DHP Krosok records from Sheet DHP Krosok
   const refreshDhpData = useCallback(
     async (rekapOverride?: KrosokRecord[]) => {
       try {
+        const curConfig = configRef.current;
         const items = await fetchDhpKrosokRecords(
-          config.dhpSpreadsheetId,
-          config.dhpSheetName,
-          rekapOverride || records
+          curConfig.dhpSpreadsheetId,
+          curConfig.dhpSheetName,
+          rekapOverride || recordsRef.current
         );
         if (Array.isArray(items)) {
           setDhpItems(items);
@@ -180,7 +186,7 @@ export default function App() {
         console.warn('DHP sync notice:', e);
       }
     },
-    [config.dhpSpreadsheetId, config.dhpSheetName, records]
+    []
   );
 
   // Save Role change to localStorage
@@ -248,16 +254,18 @@ export default function App() {
   // Sync Logic (Silent Background or Manual) — Unfiltered Single Source of Truth
   const performSync = useCallback(
     async (_isManual: boolean = false) => {
+      const curConfig = configRef.current;
+      const curRecords = recordsRef.current;
       setSyncStatus('syncing');
       try {
-        const freshData: KrosokRecord[] = await fetchUnifiedRekapRecords(config, records);
-        let activeRekap = records;
+        const freshData: KrosokRecord[] = await fetchUnifiedRekapRecords(curConfig, curRecords);
+        let activeRekap = curRecords;
 
         if (freshData && freshData.length > 0) {
           activeRekap = freshData;
           setRecords(freshData);
           setCachedRecords(freshData);
-          const updatedConfig = { ...config, lastSyncTimestamp: Date.now() };
+          const updatedConfig = { ...curConfig, lastSyncTimestamp: Date.now() };
           setConfig(updatedConfig);
           saveConfig(updatedConfig);
           setSyncStatus('synced');
@@ -296,7 +304,7 @@ export default function App() {
         }, 2000);
       }
     },
-    [config, records, refreshDhpData]
+    [refreshDhpData]
   );
 
   // Initial Background Sync & Factory Weather Fetch on App Mount

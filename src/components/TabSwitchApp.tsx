@@ -374,6 +374,12 @@ export const TabSwitchApp: React.FC<TabSwitchAppProps> = ({
                     )}
                   </button>
                 </div>
+                {!app.isActive && app.url.includes('.vercel.app') && (
+                  <div className="mt-1.5 flex items-center gap-1 text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                    <AlertCircle className="w-3 h-3 shrink-0" />
+                    <span>URL Vercel lama — edit jika modul sudah pindah ke Cloudflare</span>
+                  </div>
+                )}
               </div>
 
               {/* Bottom Actions */}

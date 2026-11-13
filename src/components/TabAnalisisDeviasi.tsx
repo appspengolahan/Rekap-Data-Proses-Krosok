@@ -33,7 +33,7 @@ import {
   KrosokRecord,
   KrosokStandarAcuan
 } from '../types';
-import { formatNum, formatPct, MONTH_ORDER, round2 } from '../services/dataService';
+import { formatNum, formatPct, formatWibLongDate, getTodayWibIso, MONTH_ORDER, round2 } from '../services/dataService';
 import {
   calculateBaselineFromPeriod,
   computeEvaluasiBulananKrosok,
@@ -228,7 +228,7 @@ export const TabAnalisisDeviasi: React.FC<TabAnalisisDeviasiProps> = ({
       globalOosPct: round2(o),
       periodeLabel,
       berlakuLabel,
-      appliedAt: new Date().toISOString().split('T')[0]
+      appliedAt: getTodayWibIso()
     };
 
     const computed = calculateBaselineFromPeriod(
@@ -270,7 +270,7 @@ export const TabAnalisisDeviasi: React.FC<TabAnalisisDeviasiProps> = ({
     );
     onApplyBaseline(computed, {
       ...DEFAULT_BASELINE_META,
-      appliedAt: new Date().toISOString().split('T')[0]
+      appliedAt: getTodayWibIso()
     });
     setEvalBulan(DEFAULT_BASELINE_META.bulanBerlaku);
     setEvalTahun(DEFAULT_BASELINE_META.tahunBerlaku);
@@ -308,7 +308,7 @@ export const TabAnalisisDeviasi: React.FC<TabAnalisisDeviasiProps> = ({
       avgDebuAirPct: 0,
       avgBatchBakuKg: 500,
       keterangan: '',
-      updatedAt: new Date().toISOString().split('T')[0],
+      updatedAt: getTodayWibIso(),
       isManualOverride: true
     });
     setEditJenisName('');
@@ -348,7 +348,7 @@ export const TabAnalisisDeviasi: React.FC<TabAnalisisDeviasiProps> = ({
       toleransiWaspadaPct: round2(parsedWaspada),
       toleransiOosPct: round2(Math.max(parsedOos, parsedWaspada + 0.05)),
       keterangan: editKeterangan.trim() || 'Penyesuaian standar oleh pimpinan produksi',
-      updatedAt: new Date().toISOString().split('T')[0],
+      updatedAt: getTodayWibIso(),
       isManualOverride: true
     };
 
@@ -1709,11 +1709,7 @@ export const TabAnalisisDeviasi: React.FC<TabAnalisisDeviasiProps> = ({
             <div>Basis Acuan: {evaluation.periodeAcuanLabel}</div>
             <div>
               Tanggal Cetak:{' '}
-              {new Date().toLocaleDateString('id-ID', {
-                day: '2-digit',
-                month: 'long',
-                year: 'numeric'
-              })}
+              {formatWibLongDate(undefined, true)}
             </div>
           </div>
         </div>
@@ -1970,11 +1966,7 @@ export const TabAnalisisDeviasi: React.FC<TabAnalisisDeviasiProps> = ({
         <div className="pt-4 avoid-break">
           <div className="text-right text-[10px] text-slate-700 mb-3">
             Malang (Wagir),{' '}
-            {new Date().toLocaleDateString('id-ID', {
-              day: 'numeric',
-              month: 'long',
-              year: 'numeric'
-            })}
+            {formatWibLongDate(undefined, false)}
           </div>
           <div className="grid grid-cols-3 gap-6 text-center text-[10.5px]">
             <div className="border border-slate-300 rounded-lg p-3">

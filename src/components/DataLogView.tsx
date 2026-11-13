@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Search, Download, ChevronLeft, ChevronRight, Filter, Database } from 'lucide-react';
 import { KrosokRecord, DhpKrosokItem } from '../types';
-import { formatNum, formatPct, getPctClass } from '../services/dataService';
+import { formatNum, formatPct, getPctClass, getTodayWibIso } from '../services/dataService';
 
 const HARI_NAMES = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 const BULAN_NAMES = [
@@ -17,17 +17,19 @@ function formatTanggalLengkap(isoDate: string, fallback?: string): string {
       const y = parseInt(yStr, 10);
       const m = parseInt(mStr, 10) - 1;
       const d = parseInt(dStr, 10);
-      const dateObj = new Date(y, m, d);
+      const utcMs = Date.UTC(y, m, d);
+      const dateObj = new Date(utcMs);
       if (!isNaN(dateObj.getTime())) {
-        const hari = HARI_NAMES[dateObj.getDay()];
+        const hari = HARI_NAMES[dateObj.getUTCDay()];
         const bulanName = BULAN_NAMES[m] || mStr;
         return `${hari}, ${d} ${bulanName} ${y}`;
       }
     }
-    const d = new Date(isoDate);
-    if (!isNaN(d.getTime())) {
-      const hari = HARI_NAMES[d.getDay()];
-      return `${hari}, ${d.getDate()} ${BULAN_NAMES[d.getMonth()]} ${d.getFullYear()}`;
+    const parsedMs = Date.parse(isoDate);
+    if (!isNaN(parsedMs)) {
+      const wib = new Date(parsedMs + 7 * 60 * 60 * 1000);
+      const hari = HARI_NAMES[wib.getUTCDay()];
+      return `${hari}, ${wib.getUTCDate()} ${BULAN_NAMES[wib.getUTCMonth()]} ${wib.getUTCFullYear()}`;
     }
   } catch (e) {
     // fallback
@@ -164,7 +166,7 @@ export const DataLogView: React.FC<DataLogViewProps> = ({ records, dhpItems = []
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `rekap_proses_krosok_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `rekap_proses_krosok_${getTodayWibIso()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

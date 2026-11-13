@@ -1,10 +1,17 @@
 import { SwitchAppModule } from '../types';
 
+export function getCurrentKrosokOriginUrl(): string {
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}/`;
+  }
+  return 'https://rekap-proses-krosok.workers.dev/';
+}
+
 export const DEFAULT_SWITCH_APPS: SwitchAppModule[] = [
   {
     id: 'krosok',
     title: 'Rekap Proses Krosok',
-    url: 'https://rekap-data-krosok-api-phi.vercel.app/',
+    url: getCurrentKrosokOriginUrl(),
     category: 'Monitoring Board Proses PP1',
     description: 'Dashboard Analitik & Rekap Susut Krosok Harian/Bulanan',
     isActive: true,
@@ -56,7 +63,19 @@ export function loadSwitchApps(): SwitchAppModule[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
+        const currentOrigin = getCurrentKrosokOriginUrl();
+        let mutated = false;
+        const healed = parsed.map((item: SwitchAppModule) => {
+          if (item.id === 'krosok' && item.url && item.url.includes('.vercel.app')) {
+            mutated = true;
+            return { ...item, url: currentOrigin };
+          }
+          return item;
+        });
+        if (mutated) {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(healed));
+        }
+        return healed;
       }
     }
   } catch (err) {
