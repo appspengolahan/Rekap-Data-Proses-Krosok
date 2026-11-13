@@ -166,12 +166,13 @@ export default function App() {
 
   const recordsRef = useRef<KrosokRecord[]>(records);
   const configRef = useRef<GASConfig>(config);
+  const isSyncingRef = useRef<boolean>(false);
   recordsRef.current = records;
   configRef.current = config;
 
   // Refresh DHP Krosok records from Sheet DHP Krosok
   const refreshDhpData = useCallback(
-    async (rekapOverride?: KrosokRecord[]) => {
+    async (rekapOverride?: KrosokRecord[]): Promise<DhpKrosokItem[]> => {
       try {
         const curConfig = configRef.current;
         const items = await fetchDhpKrosokRecords(
@@ -182,10 +183,12 @@ export default function App() {
         if (Array.isArray(items)) {
           setDhpItems(items);
           setCachedDhpItems(items);
+          return items;
         }
       } catch (e) {
         console.warn('DHP sync notice:', e);
       }
+      return getCachedDhpItems();
     },
     []
   );
@@ -254,7 +257,9 @@ export default function App() {
 
   // Sync Logic (Silent Background or Manual) — Unfiltered Single Source of Truth
   const performSync = useCallback(
-    async (_isManual: boolean = false) => {
+    async (isManual: boolean = false) => {
+      if (isSyncingRef.current && !isManual) return;
+      isSyncingRef.current = true;
       const curConfig = configRef.current;
       const curRecords = recordsRef.current;
       setSyncStatus('syncing');
@@ -300,6 +305,7 @@ export default function App() {
         console.warn('Sync notice (using cached/offline data):', err);
         setSyncStatus('idle');
       } finally {
+        isSyncingRef.current = false;
         setTimeout(() => {
           setSyncStatus((prev) => (prev === 'syncing' ? 'idle' : prev));
         }, 2000);
@@ -325,11 +331,12 @@ export default function App() {
     }
   }, [isDhpModalOpen, weatherData, weatherLoading, refreshFactoryWeather]);
 
-  // AutoSync Background Timer Interval
+  // AutoSync Background Timer Interval (paused while tab is hidden in background)
   useEffect(() => {
     if (!config.autoSyncEnabled) return;
     const intervalMs = (config.autoSyncIntervalSeconds || 60) * 1000;
     const interval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       performSync(false);
     }, intervalMs);
     return () => clearInterval(interval);

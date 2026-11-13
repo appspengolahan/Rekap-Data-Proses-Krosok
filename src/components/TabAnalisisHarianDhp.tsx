@@ -499,6 +499,7 @@ export const TabAnalisisHarianDhp: React.FC<TabAnalisisHarianDhpProps> = ({
       onRefreshWeather(PP1_FACTORY_LOCATIONS[0], false);
     }
     const liveInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       onRefreshWeather(PP1_FACTORY_LOCATIONS[0], true);
     }, 300_000);
     return () => clearInterval(liveInterval);

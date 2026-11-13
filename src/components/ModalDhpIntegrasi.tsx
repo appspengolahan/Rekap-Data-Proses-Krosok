@@ -66,7 +66,7 @@ interface ModalDhpIntegrasiProps {
   config: GASConfig;
   dhpItems: DhpKrosokItem[];
   rekapRecords?: KrosokRecord[];
-  onRefreshDhp: () => Promise<void>;
+  onRefreshDhp: () => Promise<void | DhpKrosokItem[]>;
   onAppendRecordsToRekap?: (newRecords: KrosokRecord[]) => void;
   standarList?: KrosokStandarAcuan[];
   baselineMeta?: BaselineConfigMeta;
@@ -158,11 +158,12 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
     };
   }, [isOpen, techMenuOpen]);
 
-  // Interval Live Auto-Sync
+  // Interval Live Auto-Sync (paused when tab is in background)
   useEffect(() => {
     if (!isOpen || !isLiveSyncActive) return;
 
     const timer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       setCountdown((prev) => {
         if (prev <= 1) {
           onRefreshDhp();
@@ -279,12 +280,8 @@ export const ModalDhpIntegrasi: React.FC<ModalDhpIntegrasiProps> = ({
     setRefreshing(true);
     setSyncSuccessMsg(null);
     try {
-      await onRefreshDhp();
-      const latestDhp = await fetchDhpKrosokRecords(
-        config.dhpSpreadsheetId,
-        config.dhpSheetName,
-        rekapRecords
-      );
+      const refreshed = await onRefreshDhp();
+      const latestDhp = Array.isArray(refreshed) ? refreshed : dhpItems;
       const freshAudit = await fetchRekapActiveDateAudit(config, latestDhp);
       setRealizationAudit(freshAudit);
       setCountdown(12);

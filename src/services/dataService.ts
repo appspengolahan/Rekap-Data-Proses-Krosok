@@ -332,15 +332,38 @@ function parseLocaleNum(val: string | undefined): number {
   return parseFloat(cleaned.replace(/,/g, ''));
 }
 
+let _gvizRateLimitUntil = 0;
+let _consecutiveEmptyDhpCount = 0;
+let _inFlightRekapPromise: Promise<KrosokRecord[]> | null = null;
+let _inFlightRekapKey = '';
+let _inFlightDhpPromise: Promise<DhpKrosokItem[]> | null = null;
+let _inFlightDhpKey = '';
+let _inFlightAuditPromise: Promise<ActiveDateRealizationAudit | null> | null = null;
+let _inFlightAuditKey = '';
+
+function isValidGvizPayload(json: any): boolean {
+  return Boolean(json && json.status !== 'error' && json.table && Array.isArray(json.table.rows));
+}
+
+function isGvizRateLimitedStatus(status: number): boolean {
+  return status === 429 || status === 503;
+}
+
 /** Fetch data via Google Visualization API query endpoint with automatic Google Sheets CSV fallback */
 export async function fetchFromGviz(spreadsheetId: string, sheetName: string): Promise<KrosokRecord[]> {
   if (!spreadsheetId) return [];
+  if (Date.now() < _gvizRateLimitUntil) return [];
   const encSheet = encodeURIComponent(sheetName);
 
   // 1. Primary attempt: Google Visualization JSON
   try {
     const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encSheet}`;
     const response = await fetch(url);
+    if (isGvizRateLimitedStatus(response.status)) {
+      _gvizRateLimitUntil = Date.now() + 25_000;
+      console.warn(`fetchFromGviz rate-limit cooldown active (HTTP ${response.status})`);
+      return [];
+    }
     if (response.ok) {
       const text = await response.text();
       const contentType = response.headers.get('content-type') || '';
@@ -349,8 +372,9 @@ export async function fetchFromGviz(spreadsheetId: string, sheetName: string): P
         const end = text.lastIndexOf('}');
         if (start !== -1 && end > start) {
           const json = JSON.parse(text.substring(start, end + 1));
-          const rows = json.table?.rows || [];
-          const records: KrosokRecord[] = [];
+          if (isValidGvizPayload(json)) {
+            const rows = json.table.rows || [];
+            const records: KrosokRecord[] = [];
 
           for (let i = 0; i < rows.length; i++) {
             const c = rows[i].c;
@@ -405,6 +429,7 @@ export async function fetchFromGviz(spreadsheetId: string, sheetName: string): P
           }
 
           if (records.length > 0) return records;
+          }
         }
       }
     }
@@ -416,6 +441,10 @@ export async function fetchFromGviz(spreadsheetId: string, sheetName: string): P
   try {
     const csvUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&sheet=${encSheet}`;
     const csvResp = await fetch(csvUrl);
+    if (isGvizRateLimitedStatus(csvResp.status)) {
+      _gvizRateLimitUntil = Date.now() + 25_000;
+      return [];
+    }
     if (!csvResp.ok) return [];
     const csvText = await csvResp.text();
     const csvContentType = csvResp.headers.get('content-type') || '';
@@ -880,60 +909,74 @@ export async function fetchUnifiedRekapRecords(
   config: GASConfig,
   existingRecords: KrosokRecord[] = []
 ): Promise<KrosokRecord[]> {
-  const baselineRef =
-    existingRecords.length >= INITIAL_SEED_RECORDS.length
-      ? existingRecords
-      : INITIAL_SEED_RECORDS;
+  const reqKey = `${config.spreadsheetId}|${config.sheetName}|${config.gasUrl}`;
+  if (_inFlightRekapPromise && _inFlightRekapKey === reqKey) {
+    return _inFlightRekapPromise;
+  }
 
-  const [gvizRows, gasRows] = await Promise.all([
-    fetchFromGviz(config.spreadsheetId, config.sheetName),
-    fetchFromGAS(config.gasUrl, baselineRef)
-  ]);
+  _inFlightRekapKey = reqKey;
+  _inFlightRekapPromise = (async () => {
+    const baselineRef =
+      existingRecords.length >= INITIAL_SEED_RECORDS.length
+        ? existingRecords
+        : INITIAL_SEED_RECORDS;
 
-  // Build detail lookup from Gviz (carries exact airKg, debuKg, gagangKg, jenisPerlakuan on visible rows)
-  const gvizMap = new Map<string, KrosokRecord>();
-  gvizRows.forEach((r) => {
-    gvizMap.set(`${r.tanggal}|${r.baku.toFixed(1)}|${r.jenisKrosok.toLowerCase()}`, r);
+    const [gvizRows, gasRows] = await Promise.all([
+      fetchFromGviz(config.spreadsheetId, config.sheetName),
+      fetchFromGAS(config.gasUrl, baselineRef)
+    ]);
+
+    // Build detail lookup from Gviz (carries exact airKg, debuKg, gagangKg, jenisPerlakuan on visible rows)
+    const gvizMap = new Map<string, KrosokRecord>();
+    gvizRows.forEach((r) => {
+      gvizMap.set(`${r.tanggal}|${r.baku.toFixed(1)}|${r.jenisKrosok.toLowerCase()}`, r);
+    });
+
+    if (gasRows.length > 0 && gasRows.length >= gvizRows.length) {
+      return gasRows.map((r) => {
+        const gMatch = gvizMap.get(
+          `${r.tanggal}|${r.baku.toFixed(1)}|${r.jenisKrosok.toLowerCase()}`
+        );
+        if (!gMatch) return r;
+        return {
+          ...r,
+          hasil: gMatch.hasil,
+          susutKg: gMatch.susutKg,
+          susutPct: gMatch.susutPct,
+          jenisPerlakuan: gMatch.jenisPerlakuan || r.jenisPerlakuan,
+          gagangKg: gMatch.gagangKg,
+          gagangPct: gMatch.gagangPct,
+          airKg: gMatch.airKg,
+          debuKg: gMatch.debuKg,
+          debuAirKg: gMatch.debuAirKg,
+          debuAirPct: gMatch.debuAirPct
+        };
+      });
+    }
+
+    // If GAS was unreachable and Gviz returned only a filtered subset (e.g. Sept-Oct filter active),
+    // merge Gviz updates into baselineRef instead of wiping out unfiltered historical months!
+    if (gvizRows.length > 0 && gvizRows.length < baselineRef.length * 0.6) {
+      const mergedMap = new Map<string, KrosokRecord>();
+      baselineRef.forEach((r) => {
+        mergedMap.set(`${r.tanggal}|${r.baku.toFixed(1)}|${r.jenisKrosok.toLowerCase()}`, r);
+      });
+      gvizRows.forEach((r) => {
+        mergedMap.set(`${r.tanggal}|${r.baku.toFixed(1)}|${r.jenisKrosok.toLowerCase()}`, r);
+      });
+      return Array.from(mergedMap.values()).sort((a, b) =>
+        a.tanggal !== b.tanggal ? a.tanggal.localeCompare(b.tanggal) : a.srcRow - b.srcRow
+      );
+    }
+
+    return gvizRows;
+  })().finally(() => {
+    if (_inFlightRekapKey === reqKey) {
+      _inFlightRekapPromise = null;
+    }
   });
 
-  if (gasRows.length > 0 && gasRows.length >= gvizRows.length) {
-    return gasRows.map((r) => {
-      const gMatch = gvizMap.get(
-        `${r.tanggal}|${r.baku.toFixed(1)}|${r.jenisKrosok.toLowerCase()}`
-      );
-      if (!gMatch) return r;
-      return {
-        ...r,
-        hasil: gMatch.hasil,
-        susutKg: gMatch.susutKg,
-        susutPct: gMatch.susutPct,
-        jenisPerlakuan: gMatch.jenisPerlakuan || r.jenisPerlakuan,
-        gagangKg: gMatch.gagangKg,
-        gagangPct: gMatch.gagangPct,
-        airKg: gMatch.airKg,
-        debuKg: gMatch.debuKg,
-        debuAirKg: gMatch.debuAirKg,
-        debuAirPct: gMatch.debuAirPct
-      };
-    });
-  }
-
-  // If GAS was unreachable and Gviz returned only a filtered subset (e.g. Sept-Oct filter active),
-  // merge Gviz updates into baselineRef instead of wiping out unfiltered historical months!
-  if (gvizRows.length > 0 && gvizRows.length < baselineRef.length * 0.6) {
-    const mergedMap = new Map<string, KrosokRecord>();
-    baselineRef.forEach((r) => {
-      mergedMap.set(`${r.tanggal}|${r.baku.toFixed(1)}|${r.jenisKrosok.toLowerCase()}`, r);
-    });
-    gvizRows.forEach((r) => {
-      mergedMap.set(`${r.tanggal}|${r.baku.toFixed(1)}|${r.jenisKrosok.toLowerCase()}`, r);
-    });
-    return Array.from(mergedMap.values()).sort((a, b) =>
-      a.tanggal !== b.tanggal ? a.tanggal.localeCompare(b.tanggal) : a.srcRow - b.srcRow
-    );
-  }
-
-  return gvizRows;
+  return _inFlightRekapPromise;
 }
 
 let _lastMergeRekapRef: KrosokRecord[] | null = null;
@@ -1083,30 +1126,48 @@ export async function fetchDhpKrosokRecords(
   rekapRecords: KrosokRecord[] = []
 ): Promise<DhpKrosokItem[]> {
   if (!dhpSpreadsheetId) return getCachedDhpItems();
-  try {
-    const encSheet = encodeURIComponent(dhpSheetName);
-    const url = `https://docs.google.com/spreadsheets/d/${dhpSpreadsheetId}/gviz/tq?tqx=out:json&sheet=${encSheet}`;
+  if (Date.now() < _gvizRateLimitUntil) return getCachedDhpItems();
 
-    const response = await fetch(url);
-    if (!response.ok) {
-      console.warn(`DHP Sheet request notice (Status: ${response.status})`);
-      return getCachedDhpItems();
-    }
+  const dhpKey = `${dhpSpreadsheetId}|${dhpSheetName}`;
+  if (_inFlightDhpPromise && _inFlightDhpKey === dhpKey) {
+    return _inFlightDhpPromise;
+  }
 
-    const text = await response.text();
-    const contentType = response.headers.get('content-type') || '';
-    if (isHtmlResponse(text, contentType) || text.trim().startsWith('<')) {
-      return getCachedDhpItems();
-    }
-    const start = text.indexOf('{');
-    const end = text.lastIndexOf('}');
-    if (start === -1 || end === -1) {
-      return getCachedDhpItems();
-    }
+  _inFlightDhpKey = dhpKey;
+  _inFlightDhpPromise = (async () => {
+    try {
+      const encSheet = encodeURIComponent(dhpSheetName);
+      const url = `https://docs.google.com/spreadsheets/d/${dhpSpreadsheetId}/gviz/tq?tqx=out:json&sheet=${encSheet}`;
 
-    const json = JSON.parse(text.substring(start, end + 1));
-    const rows = json.table?.rows || [];
-    const items: DhpKrosokItem[] = [];
+      const response = await fetch(url);
+      if (isGvizRateLimitedStatus(response.status)) {
+        _gvizRateLimitUntil = Date.now() + 25_000;
+        console.warn(`DHP Sheet rate-limit cooldown (HTTP ${response.status})`);
+        return getCachedDhpItems();
+      }
+      if (!response.ok) {
+        console.warn(`DHP Sheet request notice (Status: ${response.status})`);
+        return getCachedDhpItems();
+      }
+
+      const text = await response.text();
+      const contentType = response.headers.get('content-type') || '';
+      if (isHtmlResponse(text, contentType) || text.trim().startsWith('<')) {
+        return getCachedDhpItems();
+      }
+      const start = text.indexOf('{');
+      const end = text.lastIndexOf('}');
+      if (start === -1 || end === -1) {
+        return getCachedDhpItems();
+      }
+
+      const json = JSON.parse(text.substring(start, end + 1));
+      if (!isValidGvizPayload(json)) {
+        console.warn('DHP Gviz payload status error/incomplete, keeping cached DHP items.');
+        return getCachedDhpItems();
+      }
+      const rows = json.table.rows || [];
+      const items: DhpKrosokItem[] = [];
 
     // Extract active operational sheet date from top header rows (e.g. Row 0 Col C: "Senin, 26 Oktober 2026")
     let detectedSheetDateLabel = '';
@@ -1318,13 +1379,31 @@ export async function fetchDhpKrosokRecords(
       setDhpActiveSheetIsoDate(detectedSheetIsoDate);
     }
 
-    // Always store and return the exact live state of Sheet DHP Krosok (even if 0 active batches)
-    setCachedDhpItems(items);
-    return items;
-  } catch (err) {
-    console.warn('fetchDhpKrosokRecords network notice (using cached):', err);
-    return getCachedDhpItems();
-  }
+      // Grace threshold: avoid wiping cached DHP items on a single transient empty Gviz/IMPORTRANGE frame
+      if (items.length === 0) {
+        const prevCached = getCachedDhpItems();
+        _consecutiveEmptyDhpCount++;
+        if (prevCached.length > 0 && _consecutiveEmptyDhpCount < 2) {
+          return prevCached;
+        }
+      } else {
+        _consecutiveEmptyDhpCount = 0;
+      }
+
+      // Always store and return the confirmed state of Sheet DHP Krosok
+      setCachedDhpItems(items);
+      return items;
+    } catch (err) {
+      console.warn('fetchDhpKrosokRecords network notice (using cached):', err);
+      return getCachedDhpItems();
+    }
+  })().finally(() => {
+    if (_inFlightDhpKey === dhpKey) {
+      _inFlightDhpPromise = null;
+    }
+  });
+
+  return _inFlightDhpPromise;
 }
 
 let _dhpActiveLabelCache: string | null = null;
@@ -1386,30 +1465,45 @@ export async function fetchRekapActiveDateAudit(
   if (!activeIsoDate || !/^\d{4}-\d{2}-\d{2}$/.test(activeIsoDate) || !config.spreadsheetId) {
     return null;
   }
+  if (Date.now() < _gvizRateLimitUntil) {
+    return null;
+  }
+
+  const auditKey = `${config.spreadsheetId}|${config.sheetName}|${activeIsoDate}`;
+  if (_inFlightAuditPromise && _inFlightAuditKey === auditKey) {
+    return _inFlightAuditPromise;
+  }
 
   const activeDateDisplay =
     (dhpItems.length > 0 ? dhpItems[0].tanggalDisplay : '') ||
     getDhpActiveSheetDateLabel() ||
     formatTanggalIndo(activeIsoDate);
 
-  try {
-    const encSheet = encodeURIComponent(config.sheetName);
-    const url = `https://docs.google.com/spreadsheets/d/${config.spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encSheet}`;
+  _inFlightAuditKey = auditKey;
+  _inFlightAuditPromise = (async () => {
+    try {
+      const encSheet = encodeURIComponent(config.sheetName);
+      const url = `https://docs.google.com/spreadsheets/d/${config.spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encSheet}`;
 
-    const response = await fetch(url, { cache: 'no-store' });
-    if (!response.ok) return null;
+      const response = await fetch(url, { cache: 'no-store' });
+      if (isGvizRateLimitedStatus(response.status)) {
+        _gvizRateLimitUntil = Date.now() + 25_000;
+        return null;
+      }
+      if (!response.ok) return null;
 
-    const text = await response.text();
-    const contentType = response.headers.get('content-type') || '';
-    if (isHtmlResponse(text, contentType) || text.trim().startsWith('<')) return null;
-    const start = text.indexOf('{');
-    const end = text.lastIndexOf('}');
-    if (start === -1 || end === -1) return null;
+      const text = await response.text();
+      const contentType = response.headers.get('content-type') || '';
+      if (isHtmlResponse(text, contentType) || text.trim().startsWith('<')) return null;
+      const start = text.indexOf('{');
+      const end = text.lastIndexOf('}');
+      if (start === -1 || end === -1) return null;
 
-    const json = JSON.parse(text.substring(start, end + 1));
-    const rows = json.table?.rows || [];
+      const json = JSON.parse(text.substring(start, end + 1));
+      if (!isValidGvizPayload(json)) return null;
+      const rows = json.table.rows || [];
 
-    const rekapOnActiveDate: RekapRawDateRow[] = [];
+      const rekapOnActiveDate: RekapRawDateRow[] = [];
 
     for (let i = 0; i < rows.length; i++) {
       const c = rows[i]?.c;
@@ -1528,10 +1622,17 @@ export async function fetchRekapActiveDateAudit(
       protectedOrphanRows,
       purgeableRows: [...cancelledPlanRows, ...emptyTemplateRows]
     };
-  } catch (err) {
-    console.warn('Active-date realization audit notice:', err);
-    return null;
-  }
+    } catch (err) {
+      console.warn('Active-date realization audit notice:', err);
+      return null;
+    }
+  })().finally(() => {
+    if (_inFlightAuditKey === auditKey) {
+      _inFlightAuditPromise = null;
+    }
+  });
+
+  return _inFlightAuditPromise;
 }
 
 let _dhpCacheRaw: string | null | undefined = undefined;
